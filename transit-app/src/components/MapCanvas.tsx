@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import SearchBox from './SearchBox';
+import type { SavedLocation } from '../types/location';
 
 const blueDotIcon = new L.Icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
@@ -21,6 +23,7 @@ function RecenterMap({ coords }: { coords: [number, number] }) {
 
 export default function MapCanvas() {
   const [position, setPosition] = useState<[number, number] | null>(null);
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,11 +34,15 @@ export default function MapCanvas() {
 
     navigator.geolocation.getCurrentPosition(
       (profile) => {
-        setPosition([profile.coords.latitude, profile.coords.longitude]);
+        const coords: [number, number] = [profile.coords.latitude, profile.coords.longitude];
+        setPosition(coords);
+        setMapCenter(coords);
       },
       (err) => {
         setError(`Location access denied or unavailable: ${err.message}`);
-        setPosition([43.6532, -79.3832]);
+        const fallback: [number, number] = [43.6532, -79.3832];
+        setPosition(fallback);
+        setMapCenter(fallback);
       },
       {
         enableHighAccuracy: true,
@@ -45,18 +52,23 @@ export default function MapCanvas() {
     );
   }, []);
 
+  const handleLocationSelect = (location: SavedLocation) => {
+    setMapCenter([location.lat, location.lon]);
+  };
+
   if (error && !position) {
     return <div className="p-4 bg-red-100 text-red-700">{error}</div>;
   }
 
-  if (!position) {
+  if (!position || !mapCenter) {
     return <div className="p-4 text-gray-600">Prompting for location services...</div>;
   }
 
   return (
     <div style={{ height: '100vh', width: '100%' }} className="relative">
+      <SearchBox onLocationSelect={handleLocationSelect} />
       <MapContainer
-        center={position}
+        center={mapCenter}
         zoom={13}
         scrollWheelZoom={true}
         style={{ height: '100%', width: '100%' }}
@@ -68,7 +80,7 @@ export default function MapCanvas() {
         <Marker position={position} icon={blueDotIcon}>
           <Popup>You are here</Popup>
         </Marker>
-        <RecenterMap coords={position} />
+        <RecenterMap coords={mapCenter} />
       </MapContainer>
     </div>
   );
