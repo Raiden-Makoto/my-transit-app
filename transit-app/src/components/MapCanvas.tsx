@@ -10,8 +10,10 @@ type Bbox = [number, number, number, number];
 function BoundsWatcher({ onChange }: { onChange: (bbox: Bbox) => void }) {
   const emit = useCallback(
     (map: L.Map) => {
-      // Pad the visible bounds so nearby off-screen results are still allowed.
-      const b = map.getBounds().pad(0.75);
+      // Pad the visible bounds generously so nearby off-screen results are
+      // still allowed (search area ~5x the viewport), avoiding an overly
+      // strict filter while still excluding far-away matches.
+      const b = map.getBounds().pad(2);
       onChange([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
     },
     [onChange],

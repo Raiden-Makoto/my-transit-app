@@ -80,8 +80,8 @@ export async function searchPlaces(query: string, options: SearchOptions = {}): 
   if (options.lat != null && options.lon != null) {
     params.set('lat', String(options.lat));
     params.set('lon', String(options.lon));
-    // Strongly favour results near the current view.
-    params.set('location_bias_scale', '0.8');
+    // Favour results near the current view without overpowering relevance.
+    params.set('location_bias_scale', '0.5');
     params.set('zoom', '12');
   }
   if (options.bbox) {
