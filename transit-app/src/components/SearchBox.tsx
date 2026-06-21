@@ -1,8 +1,24 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { Search, X, Home, Briefcase, Clock, CornerUpRight, MapPin, Loader2, Trash2, Star } from 'lucide-react';
+import {
+  Search,
+  X,
+  Home,
+  Briefcase,
+  Clock,
+  CornerUpRight,
+  MapPin,
+  Loader2,
+  Trash2,
+  Star,
+  FolderPlus,
+  Folder,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useLocationHistory } from '../hooks/useLocationHistory';
 import type { SavedPlacesApi } from '../hooks/useSavedPlaces';
+import { COLLECTION_PLACE_LIMIT, type CollectionsApi } from '../hooks/useCollections';
 import { usePlaceSearch, type SearchViewport } from '../hooks/usePlaceSearch';
 import type { SavedLocation } from '../types/location';
 
@@ -10,6 +26,8 @@ type SearchBoxProps = {
   onLocationSelect?: (location: SavedLocation) => void;
   viewport?: SearchViewport;
   savedPlaces: SavedPlacesApi;
+  collections: CollectionsApi;
+  onAddToList: (place: SavedLocation) => void;
 };
 
 type Slot = 'home' | 'work';
@@ -18,7 +36,13 @@ function formatAddress(loc: SavedLocation): string {
   return loc.secondaryText || loc.primaryText;
 }
 
-export default function SearchBox({ onLocationSelect, viewport, savedPlaces }: SearchBoxProps) {
+export default function SearchBox({
+  onLocationSelect,
+  viewport,
+  savedPlaces,
+  collections,
+  onAddToList,
+}: SearchBoxProps) {
   const [homeLoc, setHomeLoc] = useLocalStorage<SavedLocation | null>('user_home', null);
   const [workLoc, setWorkLoc] = useLocalStorage<SavedLocation | null>('user_work', null);
   const { recents, addToHistory, removeFromHistory } = useLocationHistory();
@@ -27,6 +51,9 @@ export default function SearchBox({ onLocationSelect, viewport, savedPlaces }: S
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
   const [assigning, setAssigning] = useState<Slot | null>(null);
+  const [expandedList, setExpandedList] = useState<string | null>(null);
+  const [creatingList, setCreatingList] = useState(false);
+  const [newListName, setNewListName] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { results, loading, error } = usePlaceSearch(query, viewport);
@@ -58,6 +85,13 @@ export default function SearchBox({ onLocationSelect, viewport, savedPlaces }: S
   const clearSlot = (slot: Slot) => {
     if (slot === 'home') setHomeLoc(null);
     else setWorkLoc(null);
+  };
+
+  const submitNewList = () => {
+    if (collections.createCollection(newListName)) {
+      setNewListName('');
+      setCreatingList(false);
+    }
   };
 
   const startAssigning = (slot: Slot) => {
@@ -222,8 +256,17 @@ export default function SearchBox({ onLocationSelect, viewport, savedPlaces }: S
                       <button
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => onAddToList(place)}
+                        className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+                        aria-label={`Add ${place.primaryText} to a list`}
+                      >
+                        <FolderPlus size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => toggleSaved(place)}
-                        className={`ml-2 shrink-0 rounded-full p-1.5 transition-opacity hover:bg-[#f1f3f4] ${
+                        className={`ml-1 shrink-0 rounded-full p-1.5 transition-opacity hover:bg-[#f1f3f4] ${
                           starred ? 'text-[#1a73e8] opacity-100' : 'text-[#5f6368] opacity-0 group-hover:opacity-100'
                         }`}
                         aria-label={starred ? `Unsave ${place.primaryText}` : `Save ${place.primaryText}`}
@@ -278,6 +321,128 @@ export default function SearchBox({ onLocationSelect, viewport, savedPlaces }: S
                   ))}
                 </>
               )}
+
+              <div className="h-px my-1.5 bg-[#eceff1]" />
+              <div className="flex items-center justify-between px-4 pt-1 pb-1">
+                <p className="m-0 text-[12px] font-medium uppercase tracking-wide text-[#5f6368]">Your lists</p>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setCreatingList((v) => !v)}
+                  className="text-[13px] font-medium text-[#1a73e8] hover:underline"
+                >
+                  New list
+                </button>
+              </div>
+
+              {creatingList && (
+                <div className="flex items-center gap-2 px-4 py-2">
+                  <FolderPlus size={18} className="shrink-0 text-[#5f6368]" />
+                  <input
+                    autoFocus
+                    type="text"
+                    value={newListName}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onChange={(e) => setNewListName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') submitNewList();
+                      if (e.key === 'Escape') {
+                        setCreatingList(false);
+                        setNewListName('');
+                      }
+                    }}
+                    placeholder="New list name"
+                    className="flex-1 min-w-0 bg-transparent outline-none text-[14px] text-[#202124] placeholder:text-[#5f6368]"
+                  />
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={submitNewList}
+                    disabled={!newListName.trim()}
+                    className="shrink-0 rounded-full px-3 py-1 text-[13px] font-medium text-white bg-[#1a73e8] disabled:opacity-40"
+                  >
+                    Create
+                  </button>
+                </div>
+              )}
+
+              {collections.collections.length === 0 && !creatingList && (
+                <p className="px-4 py-2 text-[13px] text-[#5f6368]">No lists yet</p>
+              )}
+
+              {collections.collections.map((list) => {
+                const expanded = expandedList === list.id;
+                return (
+                  <div key={list.id}>
+                    <div className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5]">
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => setExpandedList(expanded ? null : list.id)}
+                        className="flex flex-1 items-center min-w-0 text-left"
+                      >
+                        <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] text-[#5f6368]">
+                          <Folder size={18} />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <h3 className="m-0 text-[15px] leading-tight text-[#202124] truncate">{list.name}</h3>
+                          <p className="m-0 text-[13px] leading-snug text-[#5f6368]">
+                            {list.places.length}/{COLLECTION_PLACE_LIMIT} places
+                          </p>
+                        </span>
+                        <span className="ml-2 shrink-0 text-[#5f6368]">
+                          {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => collections.deleteCollection(list.id)}
+                        className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+                        aria-label={`Delete list ${list.name}`}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+
+                    {expanded &&
+                      (list.places.length === 0 ? (
+                        <p className="pl-[68px] pr-4 py-2 text-[13px] text-[#5f6368]">No places yet</p>
+                      ) : (
+                        list.places.map((place) => (
+                          <div
+                            key={place.id}
+                            className="group/place flex w-full items-center pl-[60px] pr-4 py-2 transition-colors hover:bg-[#f5f5f5]"
+                          >
+                            <button
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => selectLocation(place)}
+                              className="flex flex-1 items-center min-w-0 text-left"
+                            >
+                              <MapPin size={16} className="mr-3 shrink-0 text-[#5f6368]" />
+                              <span className="flex-1 min-w-0">
+                                <span className="block text-[14px] text-[#202124] truncate">{place.primaryText}</span>
+                                {place.secondaryText && (
+                                  <span className="block text-[12px] text-[#5f6368] truncate">{place.secondaryText}</span>
+                                )}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => collections.removePlaceFromCollection(list.id, place.id)}
+                              className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover/place:opacity-100"
+                              aria-label={`Remove ${place.primaryText} from ${list.name}`}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))
+                      ))}
+                  </div>
+                );
+              })}
 
               {recents.length > 0 && <div className="h-px my-1.5 bg-[#eceff1]" />}
 

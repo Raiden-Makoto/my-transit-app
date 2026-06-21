@@ -6,3 +6,9 @@ export interface SavedLocation {
     lat: number;
     lon: number;
   }
+
+export interface PlaceCollection {
+    id: string;
+    name: string;
+    places: SavedLocation[];
+  }
