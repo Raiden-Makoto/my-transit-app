@@ -7,14 +7,32 @@ import type { SavedLocation } from '../types/location';
 
 type Bbox = [number, number, number, number];
 
+// Never search a box smaller than ~25 km half-width, so that when zoomed in
+// tight we still find nearby places instead of an overly limited set.
+const MIN_HALF_HEIGHT_DEG = 0.22; // ~25 km in latitude
+
 function BoundsWatcher({ onChange }: { onChange: (bbox: Bbox) => void }) {
   const emit = useCallback(
     (map: L.Map) => {
-      // Pad the visible bounds generously so nearby off-screen results are
-      // still allowed (search area ~5x the viewport), avoiding an overly
-      // strict filter while still excluding far-away matches.
-      const b = map.getBounds().pad(2);
-      onChange([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+      // Pad the visible bounds so nearby off-screen results are allowed.
+      const b = map.getBounds().pad(1);
+      const center = b.getCenter();
+
+      // Enforce a minimum span so high zoom levels don't over-restrict results.
+      // Scale the longitude floor by latitude so the box stays roughly square.
+      const lonScale = Math.max(Math.cos((center.lat * Math.PI) / 180), 0.1);
+      const minHalfLat = MIN_HALF_HEIGHT_DEG;
+      const minHalfLon = MIN_HALF_HEIGHT_DEG / lonScale;
+
+      const halfLat = Math.max((b.getNorth() - b.getSouth()) / 2, minHalfLat);
+      const halfLon = Math.max((b.getEast() - b.getWest()) / 2, minHalfLon);
+
+      onChange([
+        center.lng - halfLon,
+        center.lat - halfLat,
+        center.lng + halfLon,
+        center.lat + halfLat,
+      ]);
     },
     [onChange],
   );
