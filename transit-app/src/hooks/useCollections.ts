@@ -3,12 +3,24 @@ import type { PlaceCollection, SavedLocation } from '../types/location';
 
 export const COLLECTION_PLACE_LIMIT = 10;
 
+export const COLLECTION_COLORS = [
+  '#1a73e8',
+  '#34a853',
+  '#ea4335',
+  '#fbbc04',
+  '#a142f4',
+  '#ff6d01',
+  '#00acc1',
+  '#5f6368',
+];
+
 export type AddResult = 'added' | 'exists' | 'full' | 'missing';
 
 export type CollectionsApi = {
   collections: PlaceCollection[];
   createCollection: (name: string) => PlaceCollection | null;
   renameCollection: (id: string, name: string) => void;
+  setCollectionColor: (id: string, color: string) => void;
   deleteCollection: (id: string) => void;
   addPlaceToCollection: (id: string, place: SavedLocation) => AddResult;
   removePlaceFromCollection: (id: string, placeId: string) => void;
@@ -29,7 +41,8 @@ export function useCollections(): CollectionsApi {
   const createCollection = (name: string): PlaceCollection | null => {
     const trimmed = name.trim();
     if (!trimmed) return null;
-    const collection: PlaceCollection = { id: makeId(), name: trimmed, places: [] };
+    const color = COLLECTION_COLORS[collections.length % COLLECTION_COLORS.length];
+    const collection: PlaceCollection = { id: makeId(), name: trimmed, color, places: [] };
     setCollections((prev) => [...prev, collection]);
     return collection;
   };
@@ -38,6 +51,10 @@ export function useCollections(): CollectionsApi {
     const trimmed = name.trim();
     if (!trimmed) return;
     setCollections((prev) => prev.map((c) => (c.id === id ? { ...c, name: trimmed } : c)));
+  };
+
+  const setCollectionColor = (id: string, color: string) => {
+    setCollections((prev) => prev.map((c) => (c.id === id ? { ...c, color } : c)));
   };
 
   const deleteCollection = (id: string) => {
@@ -68,6 +85,7 @@ export function useCollections(): CollectionsApi {
     collections,
     createCollection,
     renameCollection,
+    setCollectionColor,
     deleteCollection,
     addPlaceToCollection,
     removePlaceFromCollection,

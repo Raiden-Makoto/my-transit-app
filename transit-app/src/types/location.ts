@@ -10,5 +10,6 @@ export interface SavedLocation {
 export interface PlaceCollection {
     id: string;
     name: string;
+    color: string;
     places: SavedLocation[];
   }

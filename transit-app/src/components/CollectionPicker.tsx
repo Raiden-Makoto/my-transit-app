@@ -79,6 +79,10 @@ export default function CollectionPicker({ place, collections, onClose }: Collec
                 >
                   <Check size={16} />
                 </span>
+                <span
+                  className="w-3 h-3 mr-3 shrink-0 rounded-full"
+                  style={{ backgroundColor: list.color || '#5f6368' }}
+                />
                 <span className="flex-1 min-w-0">
                   <span className="block text-[15px] text-[#202124] truncate">{list.name}</span>
                   <span className="block text-[12px] text-[#5f6368]">

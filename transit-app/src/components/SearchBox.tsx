@@ -14,11 +14,13 @@ import {
   Folder,
   ChevronDown,
   ChevronRight,
+  Pencil,
+  Check,
 } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useLocationHistory } from '../hooks/useLocationHistory';
 import type { SavedPlacesApi } from '../hooks/useSavedPlaces';
-import { COLLECTION_PLACE_LIMIT, type CollectionsApi } from '../hooks/useCollections';
+import { COLLECTION_PLACE_LIMIT, COLLECTION_COLORS, type CollectionsApi } from '../hooks/useCollections';
 import { usePlaceSearch, type SearchViewport } from '../hooks/usePlaceSearch';
 import type { SavedLocation } from '../types/location';
 
@@ -54,6 +56,8 @@ export default function SearchBox({
   const [expandedList, setExpandedList] = useState<string | null>(null);
   const [creatingList, setCreatingList] = useState(false);
   const [newListName, setNewListName] = useState('');
+  const [renamingList, setRenamingList] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { results, loading, error } = usePlaceSearch(query, viewport);
@@ -92,6 +96,17 @@ export default function SearchBox({
       setNewListName('');
       setCreatingList(false);
     }
+  };
+
+  const startRename = (id: string, currentName: string) => {
+    setRenamingList(id);
+    setRenameValue(currentName);
+  };
+
+  const submitRename = () => {
+    if (renamingList) collections.renameCollection(renamingList, renameValue);
+    setRenamingList(null);
+    setRenameValue('');
   };
 
   const startAssigning = (slot: Slot) => {
@@ -383,35 +398,101 @@ export default function SearchBox({
                 return (
                   <div key={list.id}>
                     <div className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5]">
-                      <button
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => setExpandedList(expanded ? null : list.id)}
-                        className="flex flex-1 items-center min-w-0 text-left"
+                      <span
+                        className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full"
+                        style={{ backgroundColor: `${list.color || '#5f6368'}22`, color: list.color || '#5f6368' }}
                       >
-                        <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] text-[#5f6368]">
-                          <Folder size={18} />
-                        </span>
-                        <span className="flex-1 min-w-0">
-                          <h3 className="m-0 text-[15px] leading-tight text-[#202124] truncate">{list.name}</h3>
-                          <p className="m-0 text-[13px] leading-snug text-[#5f6368]">
-                            {list.places.length}/{COLLECTION_PLACE_LIMIT} places
-                          </p>
-                        </span>
-                        <span className="ml-2 shrink-0 text-[#5f6368]">
-                          {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => collections.deleteCollection(list.id)}
-                        className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
-                        aria-label={`Delete list ${list.name}`}
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                        <Folder size={18} />
+                      </span>
+
+                      {renamingList === list.id ? (
+                        <input
+                          autoFocus
+                          type="text"
+                          value={renameValue}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') submitRename();
+                            if (e.key === 'Escape') {
+                              setRenamingList(null);
+                              setRenameValue('');
+                            }
+                          }}
+                          className="flex-1 min-w-0 bg-transparent outline-none border-b border-[#1a73e8] text-[15px] text-[#202124]"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => setExpandedList(expanded ? null : list.id)}
+                          className="flex flex-1 items-center min-w-0 text-left"
+                        >
+                          <span className="flex-1 min-w-0">
+                            <h3 className="m-0 text-[15px] leading-tight text-[#202124] truncate">{list.name}</h3>
+                            <p className="m-0 text-[13px] leading-snug text-[#5f6368]">
+                              {list.places.length}/{COLLECTION_PLACE_LIMIT} places
+                            </p>
+                          </span>
+                          <span className="ml-2 shrink-0 text-[#5f6368]">
+                            {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                          </span>
+                        </button>
+                      )}
+
+                      {renamingList === list.id ? (
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={submitRename}
+                          className="ml-1 shrink-0 rounded-full p-1.5 text-[#1a73e8] hover:bg-[#e8f0fe]"
+                          aria-label="Save list name"
+                        >
+                          <Check size={16} />
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => startRename(list.id, list.name)}
+                            className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+                            aria-label={`Rename list ${list.name}`}
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => collections.deleteCollection(list.id)}
+                            className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+                            aria-label={`Delete list ${list.name}`}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </>
+                      )}
                     </div>
+
+                    {expanded && (
+                      <div className="flex items-center gap-2 pl-[60px] pr-4 pb-2">
+                        {COLLECTION_COLORS.map((color) => (
+                          <button
+                            key={color}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => collections.setCollectionColor(list.id, color)}
+                            className="w-5 h-5 rounded-full transition-transform hover:scale-110"
+                            style={{
+                              backgroundColor: color,
+                              outline: list.color === color ? `2px solid ${color}` : 'none',
+                              outlineOffset: 2,
+                            }}
+                            aria-label={`Set ${list.name} color`}
+                          />
+                        ))}
+                      </div>
+                    )}
 
                     {expanded &&
                       (list.places.length === 0 ? (
