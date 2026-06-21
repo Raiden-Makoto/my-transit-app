@@ -39,9 +39,20 @@ export default function CollectionPicker({ place, collections, onClose }: Collec
         className="w-[min(92vw,360px)] max-h-[80vh] overflow-hidden flex flex-col bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.3)]"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="px-4 pt-4 pb-2">
-          <h2 className="m-0 text-[17px] font-semibold text-black">Save to list</h2>
-          <p className="m-0 text-[13px] text-[#5f6368] truncate">{place.primaryText}</p>
+        <div className="flex items-start justify-between px-4 pt-4 pb-2">
+          <div className="min-w-0">
+            <h2 className="m-0 text-[17px] font-semibold" style={{ color: '#000' }}>
+              Save to list
+            </h2>
+            <p className="m-0 text-[13px] text-[#5f6368] truncate">{place.primaryText}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="ml-2 shrink-0 rounded-full px-4 py-1.5 text-[14px] font-medium text-white bg-[#1a73e8] hover:bg-[#1765cc]"
+          >
+            Done
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto py-1">
@@ -103,16 +114,6 @@ export default function CollectionPicker({ place, collections, onClose }: Collec
           >
             <Plus size={16} />
             Create
-          </button>
-        </div>
-
-        <div className="flex justify-end px-4 py-3 border-t border-[#eceff1]">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full px-5 py-2 text-[14px] font-medium text-white bg-[#1a73e8] hover:bg-[#1765cc]"
-          >
-            Done
           </button>
         </div>
       </div>
