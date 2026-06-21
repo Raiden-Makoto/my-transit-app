@@ -44,7 +44,6 @@ export default function SearchBox({ onLocationSelect, viewport }: SearchBoxProps
       };
       if (assigning === 'home') setHomeLoc(saved);
       else setWorkLoc(saved);
-      onLocationSelect?.(saved);
       reset();
       return;
     }
