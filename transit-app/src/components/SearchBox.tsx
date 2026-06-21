@@ -2,15 +2,15 @@ import { useState } from 'react';
 import { Search, X, Home, Briefcase, Clock, CornerUpRight, MapPin, Loader2 } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useLocationHistory } from '../hooks/useLocationHistory';
-import { usePlaceSearch } from '../hooks/usePlaceSearch';
+import { usePlaceSearch, type SearchViewport } from '../hooks/usePlaceSearch';
 import type { SavedLocation } from '../types/location';
 
 type SearchBoxProps = {
   onLocationSelect?: (location: SavedLocation) => void;
-  bias?: { lat: number; lon: number };
+  viewport?: SearchViewport;
 };
 
-export default function SearchBox({ onLocationSelect, bias }: SearchBoxProps) {
+export default function SearchBox({ onLocationSelect, viewport }: SearchBoxProps) {
   const [homeLoc] = useLocalStorage<SavedLocation | null>('user_home', null);
   const [workLoc] = useLocalStorage<SavedLocation | null>('user_work', null);
   const { recents, addToHistory } = useLocationHistory();
@@ -18,7 +18,7 @@ export default function SearchBox({ onLocationSelect, bias }: SearchBoxProps) {
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
 
-  const { results, loading, error } = usePlaceSearch(query, bias);
+  const { results, loading, error } = usePlaceSearch(query, viewport);
   const hasQuery = query.trim().length > 0;
 
   const selectLocation = (location: SavedLocation) => {

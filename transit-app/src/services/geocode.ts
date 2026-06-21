@@ -55,14 +55,24 @@ function toSavedLocation(feature: PhotonFeature, index: number): SavedLocation {
   };
 }
 
+export type SearchOptions = {
+  signal?: AbortSignal;
+  limit?: number;
+  /** Center used to bias ranking toward nearby results. */
+  lat?: number;
+  lon?: number;
+  /** Hard bounding-box filter as [minLon, minLat, maxLon, maxLat]. */
+  bbox?: [number, number, number, number];
+};
+
 /**
  * Geocode a free-text query (address or place name) into ranked locations
  * using the OSM-based Photon API. Pass an AbortSignal to cancel stale requests.
+ *
+ * Results are constrained to `bbox` when provided and biased toward `lat`/`lon`
+ * so that searching while viewing one city does not surface far-away matches.
  */
-export async function searchPlaces(
-  query: string,
-  options: { signal?: AbortSignal; limit?: number; lat?: number; lon?: number } = {},
-): Promise<SavedLocation[]> {
+export async function searchPlaces(query: string, options: SearchOptions = {}): Promise<SavedLocation[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
 
@@ -70,6 +80,12 @@ export async function searchPlaces(
   if (options.lat != null && options.lon != null) {
     params.set('lat', String(options.lat));
     params.set('lon', String(options.lon));
+    // Strongly favour results near the current view.
+    params.set('location_bias_scale', '0.8');
+    params.set('zoom', '12');
+  }
+  if (options.bbox) {
+    params.set('bbox', options.bbox.join(','));
   }
 
   const response = await fetch(`${PHOTON_URL}?${params.toString()}`, { signal: options.signal });
