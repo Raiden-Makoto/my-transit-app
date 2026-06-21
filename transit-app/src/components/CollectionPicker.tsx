@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Check, Plus, FolderPlus } from 'lucide-react';
+import { Check, Plus, FolderPlus } from 'lucide-react';
 import { COLLECTION_PLACE_LIMIT, type CollectionsApi } from '../hooks/useCollections';
 import type { SavedLocation } from '../types/location';
 
@@ -39,19 +39,9 @@ export default function CollectionPicker({ place, collections, onClose }: Collec
         className="w-[min(92vw,360px)] max-h-[80vh] overflow-hidden flex flex-col bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.3)]"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between px-4 pt-4 pb-2">
-          <div className="min-w-0">
-            <h2 className="m-0 text-[17px] font-semibold text-[#1f1f1f]">Save to list</h2>
-            <p className="m-0 text-[13px] text-[#5f6368] truncate">{place.primaryText}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] hover:bg-[#f1f3f4]"
-            aria-label="Close"
-          >
-            <X size={20} />
-          </button>
+        <div className="px-4 pt-4 pb-2">
+          <h2 className="m-0 text-[17px] font-semibold text-black">Save to list</h2>
+          <p className="m-0 text-[13px] text-[#5f6368] truncate">{place.primaryText}</p>
         </div>
 
         <div className="flex-1 overflow-y-auto py-1">
