@@ -9,13 +9,7 @@ type SearchBoxProps = {
 };
 
 export default function SearchBox({ onLocationSelect }: SearchBoxProps) {
-  const [homeLoc] = useLocalStorage<SavedLocation | null>('user_home', {
-    id: 'home',
-    primaryText: 'Home',
-    secondaryText: 'McNicoll Ave at Picola Crt, North York...',
-    lat: 43.811,
-    lon: -79.345,
-  });
+  const [homeLoc] = useLocalStorage<SavedLocation | null>('user_home', null);
 
   const [workLoc] = useLocalStorage<SavedLocation | null>('user_work', null);
   const { recents, addToHistory } = useLocationHistory();
@@ -81,7 +75,9 @@ export default function SearchBox({ onLocationSelect }: SearchBoxProps) {
               <h3 className="m-0 text-[15px] font-medium leading-tight text-[#202124] truncate">Home</h3>
               <p className="m-0 text-[13px] leading-snug text-[#5f6368] truncate">{homeLoc?.secondaryText || 'Set location'}</p>
             </span>
-            <span className="ml-2 text-[13px] font-medium text-[#1a73e8] opacity-0 transition-opacity group-hover:opacity-100">Edit</span>
+            <span className="ml-2 text-[13px] font-medium text-[#1a73e8] opacity-0 transition-opacity group-hover:opacity-100">
+              {homeLoc ? 'Edit' : 'Set'}
+            </span>
           </button>
 
           <button
