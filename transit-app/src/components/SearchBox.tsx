@@ -173,7 +173,7 @@ export default function SearchBox({
 
   return (
     <div
-      className="absolute top-3 left-3 z-[1000] w-[min(92vw,400px)] font-sans text-[#202124]"
+      className="absolute top-3 left-[68px] z-[1000] w-[min(calc(92vw-68px),400px)] font-sans text-[#202124]"
       onFocus={() => setFocused(true)}
       onBlur={(e) => {
         // Keep the sheet open while focus moves between elements inside the box

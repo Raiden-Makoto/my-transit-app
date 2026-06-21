@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap, useMapEvents } from 'react-leaflet';
-import { Star, FolderPlus, Bookmark } from 'lucide-react';
+import { Star, FolderPlus, Menu } from 'lucide-react';
 import L from 'leaflet';
 import SearchBox from './SearchBox';
 import CollectionPicker from './CollectionPicker';
@@ -151,11 +151,10 @@ export default function MapCanvas() {
       <button
         type="button"
         onClick={() => setSidebarOpen(true)}
-        className="absolute top-[68px] left-3 z-[1000] flex items-center gap-2 h-10 px-4 bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#1a73e8] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
+        className="absolute top-3 left-3 z-[1000] flex items-center justify-center w-12 h-12 bg-white rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[#5f6368] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow"
         aria-label="Open your places"
       >
-        <Bookmark size={18} />
-        Your places
+        <Menu size={22} />
       </button>
 
       <Sidebar
