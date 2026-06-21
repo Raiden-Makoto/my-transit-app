@@ -41,7 +41,7 @@ export default function CollectionPicker({ place, collections, onClose }: Collec
       >
         <div className="flex items-start justify-between px-4 pt-4 pb-2">
           <div className="min-w-0">
-            <h2 className="m-0 text-[16px] font-medium text-[#202124]">Save to list</h2>
+            <h2 className="m-0 text-[17px] font-semibold text-[#1f1f1f]">Save to list</h2>
             <p className="m-0 text-[13px] text-[#5f6368] truncate">{place.primaryText}</p>
           </div>
           <button
@@ -113,6 +113,16 @@ export default function CollectionPicker({ place, collections, onClose }: Collec
           >
             <Plus size={16} />
             Create
+          </button>
+        </div>
+
+        <div className="flex justify-end px-4 py-3 border-t border-[#eceff1]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full px-5 py-2 text-[14px] font-medium text-white bg-[#1a73e8] hover:bg-[#1765cc]"
+          >
+            Done
           </button>
         </div>
       </div>
