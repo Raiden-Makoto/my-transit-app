@@ -1,7 +1,8 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { Search, X, Home, Briefcase, Clock, CornerUpRight, MapPin, Loader2, Trash2 } from 'lucide-react';
+import { Search, X, Home, Briefcase, Clock, CornerUpRight, MapPin, Loader2, Trash2, Star } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useLocationHistory } from '../hooks/useLocationHistory';
+import { useSavedPlaces } from '../hooks/useSavedPlaces';
 import { usePlaceSearch, type SearchViewport } from '../hooks/usePlaceSearch';
 import type { SavedLocation } from '../types/location';
 
@@ -20,6 +21,7 @@ export default function SearchBox({ onLocationSelect, viewport }: SearchBoxProps
   const [homeLoc, setHomeLoc] = useLocalStorage<SavedLocation | null>('user_home', null);
   const [workLoc, setWorkLoc] = useLocalStorage<SavedLocation | null>('user_work', null);
   const { recents, addToHistory, removeFromHistory } = useLocationHistory();
+  const { saved, isSaved, toggleSaved, removeSaved } = useSavedPlaces();
 
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
@@ -193,30 +195,88 @@ export default function SearchBox({ onLocationSelect, viewport }: SearchBoxProps
               )}
 
               {!loading &&
-                results.map((place) => (
-                  <button
-                    key={place.id}
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => selectLocation(place)}
-                    className="flex w-full items-center px-4 py-2.5 text-left transition-colors hover:bg-[#f5f5f5]"
-                  >
-                    <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] text-[#5f6368]">
-                      <MapPin size={18} />
-                    </span>
-                    <span className="flex-1 min-w-0">
-                      <h3 className="m-0 text-[15px] leading-tight text-[#202124] truncate">{place.primaryText}</h3>
-                      {place.secondaryText && (
-                        <p className="m-0 text-[13px] leading-snug text-[#5f6368] truncate">{place.secondaryText}</p>
-                      )}
-                    </span>
-                  </button>
-                ))}
+                results.map((place) => {
+                  const starred = isSaved(place.id);
+                  return (
+                    <div
+                      key={place.id}
+                      className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5]"
+                    >
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => selectLocation(place)}
+                        className="flex flex-1 items-center min-w-0 text-left"
+                      >
+                        <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] text-[#5f6368]">
+                          <MapPin size={18} />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <h3 className="m-0 text-[15px] leading-tight text-[#202124] truncate">{place.primaryText}</h3>
+                          {place.secondaryText && (
+                            <p className="m-0 text-[13px] leading-snug text-[#5f6368] truncate">{place.secondaryText}</p>
+                          )}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => toggleSaved(place)}
+                        className={`ml-2 shrink-0 rounded-full p-1.5 transition-opacity hover:bg-[#f1f3f4] ${
+                          starred ? 'text-[#1a73e8] opacity-100' : 'text-[#5f6368] opacity-0 group-hover:opacity-100'
+                        }`}
+                        aria-label={starred ? `Unsave ${place.primaryText}` : `Save ${place.primaryText}`}
+                        aria-pressed={starred}
+                      >
+                        <Star size={18} fill={starred ? 'currentColor' : 'none'} />
+                      </button>
+                    </div>
+                  );
+                })}
             </>
           ) : (
             <>
               {renderSavedRow('home', homeLoc, 'Home', <Home size={18} />)}
               {renderSavedRow('work', workLoc, 'Work', <Briefcase size={18} />)}
+
+              {saved.length > 0 && (
+                <>
+                  <div className="h-px my-1.5 bg-[#eceff1]" />
+                  <p className="px-4 pt-1 pb-1 text-[12px] font-medium uppercase tracking-wide text-[#5f6368]">Saved</p>
+                  {saved.map((place) => (
+                    <div
+                      key={place.id}
+                      className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5]"
+                    >
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => selectLocation(place)}
+                        className="flex flex-1 items-center min-w-0 text-left"
+                      >
+                        <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#e8f0fe] text-[#1a73e8]">
+                          <Star size={18} fill="currentColor" />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <h3 className="m-0 text-[15px] leading-tight text-[#202124] truncate">{place.primaryText}</h3>
+                          {place.secondaryText && (
+                            <p className="m-0 text-[13px] leading-snug text-[#5f6368] truncate">{place.secondaryText}</p>
+                          )}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => removeSaved(place.id)}
+                        className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+                        aria-label={`Remove ${place.primaryText} from saved`}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
 
               {recents.length > 0 && <div className="h-px my-1.5 bg-[#eceff1]" />}
 
