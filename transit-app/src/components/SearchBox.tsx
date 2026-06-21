@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Search, X, Home, Briefcase, Clock, CornerUpRight, MapPin, Loader2 } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useLocationHistory } from '../hooks/useLocationHistory';
@@ -10,27 +10,95 @@ type SearchBoxProps = {
   viewport?: SearchViewport;
 };
 
+type Slot = 'home' | 'work';
+
+function formatAddress(loc: SavedLocation): string {
+  return loc.secondaryText || loc.primaryText;
+}
+
 export default function SearchBox({ onLocationSelect, viewport }: SearchBoxProps) {
-  const [homeLoc] = useLocalStorage<SavedLocation | null>('user_home', null);
-  const [workLoc] = useLocalStorage<SavedLocation | null>('user_work', null);
+  const [homeLoc, setHomeLoc] = useLocalStorage<SavedLocation | null>('user_home', null);
+  const [workLoc, setWorkLoc] = useLocalStorage<SavedLocation | null>('user_work', null);
   const { recents, addToHistory } = useLocationHistory();
 
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
+  const [assigning, setAssigning] = useState<Slot | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const { results, loading, error } = usePlaceSearch(query, viewport);
   const hasQuery = query.trim().length > 0;
 
+  const reset = () => {
+    setQuery('');
+    setAssigning(null);
+    setFocused(false);
+  };
+
   const selectLocation = (location: SavedLocation) => {
+    if (assigning) {
+      const saved: SavedLocation = {
+        ...location,
+        id: assigning,
+        secondaryText: formatAddress(location),
+      };
+      if (assigning === 'home') setHomeLoc(saved);
+      else setWorkLoc(saved);
+      onLocationSelect?.(saved);
+      reset();
+      return;
+    }
     addToHistory(location);
     onLocationSelect?.(location);
+    reset();
+  };
+
+  const startAssigning = (slot: Slot) => {
+    setAssigning(slot);
     setQuery('');
-    setFocused(false);
+    setFocused(true);
+    inputRef.current?.focus();
   };
 
   const handleSubmit = () => {
     if (results.length > 0) selectLocation(results[0]);
   };
+
+  const placeholder =
+    assigning === 'home'
+      ? 'Choose home location'
+      : assigning === 'work'
+        ? 'Choose work location'
+        : 'Search Transit Map';
+
+  const renderSavedRow = (slot: Slot, loc: SavedLocation | null, label: string, icon: ReactNode) => (
+    <div className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5]">
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => loc && selectLocation(loc)}
+        className="flex flex-1 items-center min-w-0 text-left"
+      >
+        <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] text-[#5f6368]">
+          {icon}
+        </span>
+        <span className="flex-1 min-w-0">
+          <h3 className="m-0 text-[15px] font-medium leading-tight text-[#202124] truncate">{label}</h3>
+          <p className="m-0 text-[13px] leading-snug text-[#5f6368] truncate">{loc ? formatAddress(loc) : 'Set location'}</p>
+        </span>
+      </button>
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => startAssigning(slot)}
+        className={`ml-2 shrink-0 rounded px-2 py-1 text-[13px] font-medium text-[#1a73e8] transition-opacity hover:bg-[#e8f0fe] ${
+          loc ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'
+        }`}
+      >
+        {loc ? 'Edit' : 'Set'}
+      </button>
+    </div>
+  );
 
   return (
     <div className="absolute top-3 left-3 z-[1000] w-[min(92vw,400px)] font-sans text-[#202124]">
@@ -40,13 +108,17 @@ export default function SearchBox({ onLocationSelect, viewport }: SearchBoxProps
           <Search size={20} />
         </span>
         <input
+          ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => window.setTimeout(() => setFocused(false), 150)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-          placeholder="Search Transit Map"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleSubmit();
+            if (e.key === 'Escape') reset();
+          }}
+          placeholder={placeholder}
           className="flex-1 h-full bg-transparent border-none outline-none text-[15px] text-[#202124] placeholder:text-[#5f6368]"
         />
         {query && (
@@ -72,6 +144,22 @@ export default function SearchBox({ onLocationSelect, viewport }: SearchBoxProps
       {/* Suggestions sheet */}
       {focused && (
         <div className="mt-1.5 bg-white rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] overflow-hidden py-2">
+          {assigning && (
+            <div className="flex items-center justify-between px-4 py-2 mb-1 border-b border-[#eceff1]">
+              <span className="text-[13px] font-medium text-[#5f6368]">
+                Search for a place to set as {assigning === 'home' ? 'Home' : 'Work'}
+              </span>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={reset}
+                className="text-[13px] font-medium text-[#1a73e8] hover:underline"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
           {hasQuery ? (
             <>
               {loading && (
@@ -81,9 +169,7 @@ export default function SearchBox({ onLocationSelect, viewport }: SearchBoxProps
                 </div>
               )}
 
-              {!loading && error && (
-                <div className="px-4 py-3 text-[14px] text-[#b71c1c]">{error}</div>
-              )}
+              {!loading && error && <div className="px-4 py-3 text-[14px] text-[#b71c1c]">{error}</div>}
 
               {!loading && !error && results.length === 0 && (
                 <div className="px-4 py-3 text-[14px] text-[#5f6368]">No results found</div>
@@ -112,41 +198,8 @@ export default function SearchBox({ onLocationSelect, viewport }: SearchBoxProps
             </>
           ) : (
             <>
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => homeLoc && selectLocation(homeLoc)}
-                className="group flex w-full items-center px-4 py-2.5 text-left transition-colors hover:bg-[#f5f5f5]"
-              >
-                <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] text-[#5f6368]">
-                  <Home size={18} />
-                </span>
-                <span className="flex-1 min-w-0">
-                  <h3 className="m-0 text-[15px] font-medium leading-tight text-[#202124] truncate">Home</h3>
-                  <p className="m-0 text-[13px] leading-snug text-[#5f6368] truncate">{homeLoc?.secondaryText || 'Set location'}</p>
-                </span>
-                <span className="ml-2 text-[13px] font-medium text-[#1a73e8] opacity-0 transition-opacity group-hover:opacity-100">
-                  {homeLoc ? 'Edit' : 'Set'}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => workLoc && selectLocation(workLoc)}
-                className="group flex w-full items-center px-4 py-2.5 text-left transition-colors hover:bg-[#f5f5f5]"
-              >
-                <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] text-[#5f6368]">
-                  <Briefcase size={18} />
-                </span>
-                <span className="flex-1 min-w-0">
-                  <h3 className="m-0 text-[15px] font-medium leading-tight text-[#202124] truncate">Work</h3>
-                  <p className="m-0 text-[13px] leading-snug text-[#5f6368] truncate">{workLoc?.secondaryText || 'Set location'}</p>
-                </span>
-                <span className="ml-2 text-[13px] font-medium text-[#1a73e8] opacity-0 transition-opacity group-hover:opacity-100">
-                  {workLoc ? 'Edit' : 'Set'}
-                </span>
-              </button>
+              {renderSavedRow('home', homeLoc, 'Home', <Home size={18} />)}
+              {renderSavedRow('work', workLoc, 'Work', <Briefcase size={18} />)}
 
               {recents.length > 0 && <div className="h-px my-1.5 bg-[#eceff1]" />}
 
