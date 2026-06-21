@@ -57,15 +57,15 @@ export default function MapCanvas() {
   };
 
   if (error && !position) {
-    return <div className="p-4 bg-red-100 text-red-700">{error}</div>;
+    return <div style={{ padding: 16, background: '#fdecea', color: '#b71c1c' }}>{error}</div>;
   }
 
   if (!position || !mapCenter) {
-    return <div className="p-4 text-gray-600">Prompting for location services...</div>;
+    return <div style={{ padding: 16, color: '#5f6368' }}>Prompting for location services...</div>;
   }
 
   return (
-    <div style={{ height: '100vh', width: '100%' }} className="relative">
+    <div style={{ height: '100vh', width: '100%', position: 'relative' }}>
       <SearchBox onLocationSelect={handleLocationSelect} />
       <MapContainer
         center={mapCenter}
