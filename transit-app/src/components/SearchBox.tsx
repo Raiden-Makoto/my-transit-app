@@ -155,7 +155,17 @@ export default function SearchBox({
   );
 
   return (
-    <div className="absolute top-3 left-3 z-[1000] w-[min(92vw,400px)] font-sans text-[#202124]">
+    <div
+      className="absolute top-3 left-3 z-[1000] w-[min(92vw,400px)] font-sans text-[#202124]"
+      onFocus={() => setFocused(true)}
+      onBlur={(e) => {
+        // Keep the sheet open while focus moves between elements inside the box
+        // (e.g. the search input -> the new-list field).
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+          setFocused(false);
+        }
+      }}
+    >
       {/* Floating search pill */}
       <div className="flex items-center h-12 bg-white rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.35)]">
         <span className="flex items-center justify-center pl-[14px] pr-2 text-[#5f6368]">
@@ -166,8 +176,6 @@ export default function SearchBox({
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => window.setTimeout(() => setFocused(false), 150)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleSubmit();
             if (e.key === 'Escape') reset();
