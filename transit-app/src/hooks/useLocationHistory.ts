@@ -13,5 +13,9 @@ export function useLocationHistory() {
     });
   };
 
-  return { recents, addToHistory };
+  const removeFromHistory = (id: string) => {
+    setRecents((prev) => prev.filter((loc) => loc.id !== id));
+  };
+
+  return { recents, addToHistory, removeFromHistory };
 }

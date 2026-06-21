@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { Search, X, Home, Briefcase, Clock, CornerUpRight, MapPin, Loader2 } from 'lucide-react';
+import { Search, X, Home, Briefcase, Clock, CornerUpRight, MapPin, Loader2, Trash2 } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useLocationHistory } from '../hooks/useLocationHistory';
 import { usePlaceSearch, type SearchViewport } from '../hooks/usePlaceSearch';
@@ -19,7 +19,7 @@ function formatAddress(loc: SavedLocation): string {
 export default function SearchBox({ onLocationSelect, viewport }: SearchBoxProps) {
   const [homeLoc, setHomeLoc] = useLocalStorage<SavedLocation | null>('user_home', null);
   const [workLoc, setWorkLoc] = useLocalStorage<SavedLocation | null>('user_work', null);
-  const { recents, addToHistory } = useLocationHistory();
+  const { recents, addToHistory, removeFromHistory } = useLocationHistory();
 
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
@@ -51,6 +51,11 @@ export default function SearchBox({ onLocationSelect, viewport }: SearchBoxProps
     addToHistory(location);
     onLocationSelect?.(location);
     reset();
+  };
+
+  const clearSlot = (slot: Slot) => {
+    if (slot === 'home') setHomeLoc(null);
+    else setWorkLoc(null);
   };
 
   const startAssigning = (slot: Slot) => {
@@ -87,16 +92,29 @@ export default function SearchBox({ onLocationSelect, viewport }: SearchBoxProps
           <p className="m-0 text-[13px] leading-snug text-[#5f6368] truncate">{loc ? formatAddress(loc) : 'Set location'}</p>
         </span>
       </button>
-      <button
-        type="button"
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => startAssigning(slot)}
-        className={`ml-2 shrink-0 rounded px-2 py-1 text-[13px] font-medium text-[#1a73e8] transition-opacity hover:bg-[#e8f0fe] ${
-          loc ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'
-        }`}
-      >
-        {loc ? 'Edit' : 'Set'}
-      </button>
+      <div className="flex items-center shrink-0 ml-2">
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => startAssigning(slot)}
+          className={`rounded px-2 py-1 text-[13px] font-medium text-[#1a73e8] transition-opacity hover:bg-[#e8f0fe] ${
+            loc ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'
+          }`}
+        >
+          {loc ? 'Edit' : 'Set'}
+        </button>
+        {loc && (
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => clearSlot(slot)}
+            className="ml-1 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+            aria-label={`Remove ${label}`}
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
+      </div>
     </div>
   );
 
@@ -204,21 +222,34 @@ export default function SearchBox({ onLocationSelect, viewport }: SearchBoxProps
               {recents.length > 0 && <div className="h-px my-1.5 bg-[#eceff1]" />}
 
               {recents.map((recent) => (
-                <button
+                <div
                   key={recent.id}
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => selectLocation(recent)}
-                  className="flex w-full items-center px-4 py-2.5 text-left transition-colors hover:bg-[#f5f5f5]"
+                  className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5]"
                 >
-                  <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] text-[#5f6368]">
-                    <Clock size={18} />
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <h3 className="m-0 text-[15px] leading-tight text-[#202124] truncate">{recent.primaryText}</h3>
-                    <p className="m-0 text-[13px] leading-snug text-[#5f6368] truncate">{recent.secondaryText}</p>
-                  </span>
-                </button>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => selectLocation(recent)}
+                    className="flex flex-1 items-center min-w-0 text-left"
+                  >
+                    <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] text-[#5f6368]">
+                      <Clock size={18} />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <h3 className="m-0 text-[15px] leading-tight text-[#202124] truncate">{recent.primaryText}</h3>
+                      <p className="m-0 text-[13px] leading-snug text-[#5f6368] truncate">{recent.secondaryText}</p>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => removeFromHistory(recent.id)}
+                    className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+                    aria-label={`Remove ${recent.primaryText} from history`}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
               ))}
             </>
           )}
