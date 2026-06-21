@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap, useMapEvents } from 'react-leaflet';
-import { Star, FolderPlus, Menu } from 'lucide-react';
+import { Star, FolderPlus, Menu, X } from 'lucide-react';
 import L from 'leaflet';
 import SearchBox from './SearchBox';
 import CollectionPicker from './CollectionPicker';
@@ -188,6 +188,24 @@ export default function MapCanvas() {
       >
         <Menu size={22} />
       </button>
+
+      {viewedList && (
+        <button
+          type="button"
+          onClick={() => setViewedList(null)}
+          className="absolute top-3 right-3 z-[1000] flex items-center gap-2 h-10 pl-4 pr-3 bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#202124] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
+          aria-label="Clear list pins"
+        >
+          <span
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ backgroundColor: viewedList.color || '#1a73e8' }}
+          />
+          <span className="max-w-[160px] truncate">{viewedList.name}</span>
+          <span className="flex items-center justify-center rounded-full p-1 text-[#5f6368] hover:bg-[#f1f3f4]">
+            <X size={16} />
+          </span>
+        </button>
+      )}
 
       <Sidebar
         open={sidebarOpen}
