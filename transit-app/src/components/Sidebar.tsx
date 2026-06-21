@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { X, Star, Clock, Folder, MapPin } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { X, Star, Clock, Folder, MapPin, ChevronDown, ChevronRight } from 'lucide-react';
 import type { SavedPlacesApi } from '../hooks/useSavedPlaces';
 import type { HistoryApi } from '../hooks/useLocationHistory';
 import { COLLECTION_PLACE_LIMIT, type CollectionsApi } from '../hooks/useCollections';
@@ -15,6 +15,8 @@ type SidebarProps = {
 };
 
 export default function Sidebar({ open, onClose, savedPlaces, history, collections, onLocationSelect }: SidebarProps) {
+  const [expandedList, setExpandedList] = useState<string | null>(null);
+
   const select = (place: SavedLocation) => {
     onLocationSelect(place);
     onClose();
@@ -85,44 +87,55 @@ export default function Sidebar({ open, onClose, savedPlaces, history, collectio
           {collections.collections.length === 0 ? (
             <Empty text="No lists yet" />
           ) : (
-            collections.collections.map((list) => (
-              <div key={list.id} className="mb-1">
-                <div className="flex items-center px-4 py-2">
-                  <span
-                    className="flex items-center justify-center w-7 h-7 mr-3 shrink-0 rounded-full"
-                    style={{ backgroundColor: `${list.color || '#5f6368'}22`, color: list.color || '#5f6368' }}
+            collections.collections.map((list) => {
+              const expanded = expandedList === list.id;
+              return (
+                <div key={list.id} className="mb-1">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedList(expanded ? null : list.id)}
+                    className="flex w-full items-center px-4 py-2 text-left transition-colors hover:bg-[#f5f5f5]"
                   >
-                    <Folder size={16} />
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-[15px] font-medium truncate">{list.name}</span>
-                    <span className="block text-[12px] text-[#5f6368]">
-                      {list.places.length}/{COLLECTION_PLACE_LIMIT} places
-                    </span>
-                  </span>
-                </div>
-                {list.places.length === 0 ? (
-                  <p className="pl-[60px] pr-4 py-1.5 text-[13px] text-[#5f6368]">No places yet</p>
-                ) : (
-                  list.places.map((place) => (
-                    <button
-                      key={place.id}
-                      type="button"
-                      onClick={() => select(place)}
-                      className="flex w-full items-center pl-[52px] pr-4 py-2 text-left transition-colors hover:bg-[#f5f5f5]"
+                    <span
+                      className="flex items-center justify-center w-7 h-7 mr-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: `${list.color || '#5f6368'}22`, color: list.color || '#5f6368' }}
                     >
-                      <MapPin size={16} className="mr-3 shrink-0 text-[#5f6368]" />
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-[14px] truncate">{place.primaryText}</span>
-                        {place.secondaryText && (
-                          <span className="block text-[12px] text-[#5f6368] truncate">{place.secondaryText}</span>
-                        )}
+                      <Folder size={16} />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[15px] font-medium truncate">{list.name}</span>
+                      <span className="block text-[12px] text-[#5f6368]">
+                        {list.places.length}/{COLLECTION_PLACE_LIMIT} places
                       </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            ))
+                    </span>
+                    <span className="ml-2 shrink-0 text-[#5f6368]">
+                      {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                    </span>
+                  </button>
+                  {expanded &&
+                    (list.places.length === 0 ? (
+                      <p className="pl-[60px] pr-4 py-1.5 text-[13px] text-[#5f6368]">No places yet</p>
+                    ) : (
+                      list.places.map((place) => (
+                        <button
+                          key={place.id}
+                          type="button"
+                          onClick={() => select(place)}
+                          className="flex w-full items-center pl-[52px] pr-4 py-2 text-left transition-colors hover:bg-[#f5f5f5]"
+                        >
+                          <MapPin size={16} className="mr-3 shrink-0 text-[#5f6368]" />
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-[14px] truncate">{place.primaryText}</span>
+                            {place.secondaryText && (
+                              <span className="block text-[12px] text-[#5f6368] truncate">{place.secondaryText}</span>
+                            )}
+                          </span>
+                        </button>
+                      ))
+                    ))}
+                </div>
+              );
+            })
           )}
         </div>
       </aside>
