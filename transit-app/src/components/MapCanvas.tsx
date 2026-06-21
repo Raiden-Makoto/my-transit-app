@@ -13,6 +13,15 @@ const blueDotIcon = new L.Icon({
   shadowSize: [41, 41],
 });
 
+const redPinIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
 function RecenterMap({ coords }: { coords: [number, number] }) {
   const map = useMap();
   useEffect(() => {
@@ -24,6 +33,7 @@ function RecenterMap({ coords }: { coords: [number, number] }) {
 export default function MapCanvas() {
   const [position, setPosition] = useState<[number, number] | null>(null);
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [destination, setDestination] = useState<SavedLocation | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,6 +64,7 @@ export default function MapCanvas() {
 
   const handleLocationSelect = (location: SavedLocation) => {
     setMapCenter([location.lat, location.lon]);
+    setDestination(location);
   };
 
   if (error && !position) {
@@ -66,7 +77,7 @@ export default function MapCanvas() {
 
   return (
     <div style={{ height: '100vh', width: '100%' }} className="relative">
-      <SearchBox onLocationSelect={handleLocationSelect} />
+      <SearchBox onLocationSelect={handleLocationSelect} bias={{ lat: mapCenter[0], lon: mapCenter[1] }} />
       <MapContainer
         center={mapCenter}
         zoom={13}
@@ -82,6 +93,19 @@ export default function MapCanvas() {
         <Marker position={position} icon={blueDotIcon}>
           <Popup>You are here</Popup>
         </Marker>
+        {destination && (
+          <Marker position={[destination.lat, destination.lon]} icon={redPinIcon}>
+            <Popup>
+              <strong>{destination.primaryText}</strong>
+              {destination.secondaryText && (
+                <>
+                  <br />
+                  {destination.secondaryText}
+                </>
+              )}
+            </Popup>
+          </Marker>
+        )}
         <RecenterMap coords={mapCenter} />
       </MapContainer>
     </div>
