@@ -3,7 +3,13 @@ import type { SavedLocation } from '../types/location';
 
 const DEFAULT_RECENTS: SavedLocation[] = [];
 
-export function useLocationHistory() {
+export type HistoryApi = {
+  recents: SavedLocation[];
+  addToHistory: (location: SavedLocation) => void;
+  removeFromHistory: (id: string) => void;
+};
+
+export function useLocationHistory(): HistoryApi {
   const [recents, setRecents] = useLocalStorage<SavedLocation[]>('user_recents', DEFAULT_RECENTS);
 
   const addToHistory = (newLocation: SavedLocation) => {

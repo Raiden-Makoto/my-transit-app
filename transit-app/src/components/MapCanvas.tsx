@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap, useMapEvents } from 'react-leaflet';
-import { Star, FolderPlus } from 'lucide-react';
+import { Star, FolderPlus, Bookmark } from 'lucide-react';
 import L from 'leaflet';
 import SearchBox from './SearchBox';
 import CollectionPicker from './CollectionPicker';
+import Sidebar from './Sidebar';
 import { useSavedPlaces } from '../hooks/useSavedPlaces';
 import { useCollections } from '../hooks/useCollections';
+import { useLocationHistory } from '../hooks/useLocationHistory';
 import type { SearchViewport } from '../hooks/usePlaceSearch';
 import type { SavedLocation } from '../types/location';
 
@@ -86,8 +88,10 @@ export default function MapCanvas() {
   const [bbox, setBbox] = useState<Bbox | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pickerPlace, setPickerPlace] = useState<SavedLocation | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const savedPlaces = useSavedPlaces();
   const collections = useCollections();
+  const history = useLocationHistory();
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -140,8 +144,29 @@ export default function MapCanvas() {
         viewport={viewport}
         savedPlaces={savedPlaces}
         collections={collections}
+        history={history}
         onAddToList={setPickerPlace}
       />
+
+      <button
+        type="button"
+        onClick={() => setSidebarOpen(true)}
+        className="absolute top-[68px] left-3 z-[1000] flex items-center gap-2 h-10 px-4 bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#1a73e8] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
+        aria-label="Open your places"
+      >
+        <Bookmark size={18} />
+        Your places
+      </button>
+
+      <Sidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        savedPlaces={savedPlaces}
+        history={history}
+        collections={collections}
+        onLocationSelect={handleLocationSelect}
+      />
+
       {pickerPlace && (
         <CollectionPicker place={pickerPlace} collections={collections} onClose={() => setPickerPlace(null)} />
       )}

@@ -18,7 +18,7 @@ import {
   Check,
 } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { useLocationHistory } from '../hooks/useLocationHistory';
+import type { HistoryApi } from '../hooks/useLocationHistory';
 import type { SavedPlacesApi } from '../hooks/useSavedPlaces';
 import { COLLECTION_PLACE_LIMIT, COLLECTION_COLORS, type CollectionsApi } from '../hooks/useCollections';
 import { usePlaceSearch, type SearchViewport } from '../hooks/usePlaceSearch';
@@ -29,6 +29,7 @@ type SearchBoxProps = {
   viewport?: SearchViewport;
   savedPlaces: SavedPlacesApi;
   collections: CollectionsApi;
+  history: HistoryApi;
   onAddToList: (place: SavedLocation) => void;
 };
 
@@ -43,11 +44,12 @@ export default function SearchBox({
   viewport,
   savedPlaces,
   collections,
+  history,
   onAddToList,
 }: SearchBoxProps) {
   const [homeLoc, setHomeLoc] = useLocalStorage<SavedLocation | null>('user_home', null);
   const [workLoc, setWorkLoc] = useLocalStorage<SavedLocation | null>('user_work', null);
-  const { recents, addToHistory, removeFromHistory } = useLocationHistory();
+  const { recents, addToHistory, removeFromHistory } = history;
   const { saved, isSaved, toggleSaved, removeSaved } = savedPlaces;
 
   const [query, setQuery] = useState('');
