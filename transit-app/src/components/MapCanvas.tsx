@@ -9,9 +9,34 @@ import { useSavedPlaces } from '../hooks/useSavedPlaces';
 import { useCollections } from '../hooks/useCollections';
 import { useLocationHistory } from '../hooks/useLocationHistory';
 import type { SearchViewport } from '../hooks/usePlaceSearch';
-import type { SavedLocation } from '../types/location';
+import type { PlaceCollection, SavedLocation } from '../types/location';
 
 type Bbox = [number, number, number, number];
+
+// Build a teardrop map-pin marker in an arbitrary color so list pins can
+// match their list's color.
+function coloredPinIcon(color: string) {
+  return L.divIcon({
+    className: '',
+    html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 36" width="26" height="38">
+      <path d="M12 0C5.373 0 0 5.373 0 12c0 8.5 12 24 12 24s12-15.5 12-24C24 5.373 18.627 0 12 0z" fill="${color}" stroke="white" stroke-width="1.5"/>
+      <circle cx="12" cy="12" r="4.5" fill="white"/>
+    </svg>`,
+    iconSize: [26, 38],
+    iconAnchor: [13, 38],
+    popupAnchor: [0, -32],
+  });
+}
+
+function FitBounds({ places }: { places: SavedLocation[] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (places.length === 0) return;
+    const bounds = L.latLngBounds(places.map((p) => [p.lat, p.lon] as [number, number]));
+    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
+  }, [places, map]);
+  return null;
+}
 
 // Never search a box smaller than ~25 km half-width, so that when zoomed in
 // tight we still find nearby places instead of an overly limited set.
@@ -89,6 +114,7 @@ export default function MapCanvas() {
   const [error, setError] = useState<string | null>(null);
   const [pickerPlace, setPickerPlace] = useState<SavedLocation | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [viewedList, setViewedList] = useState<PlaceCollection | null>(null);
   const savedPlaces = useSavedPlaces();
   const collections = useCollections();
   const history = useLocationHistory();
@@ -122,6 +148,12 @@ export default function MapCanvas() {
   const handleLocationSelect = (location: SavedLocation) => {
     setMapCenter([location.lat, location.lon]);
     setDestination(location);
+    setViewedList(null);
+  };
+
+  const handleViewList = (list: PlaceCollection) => {
+    setDestination(null);
+    setViewedList(list);
   };
 
   const viewport = useMemo<SearchViewport | undefined>(
@@ -164,6 +196,7 @@ export default function MapCanvas() {
         history={history}
         collections={collections}
         onLocationSelect={handleLocationSelect}
+        onViewList={handleViewList}
       />
 
       {pickerPlace && (
@@ -239,6 +272,20 @@ export default function MapCanvas() {
             </Popup>
           </Marker>
         )}
+        {viewedList?.places.map((place) => (
+          <Marker key={place.id} position={[place.lat, place.lon]} icon={coloredPinIcon(viewedList.color || '#1a73e8')}>
+            <Popup>
+              <strong>{place.primaryText}</strong>
+              {place.secondaryText && (
+                <>
+                  <br />
+                  {place.secondaryText}
+                </>
+              )}
+            </Popup>
+          </Marker>
+        ))}
+        {viewedList && viewedList.places.length > 0 && <FitBounds places={viewedList.places} />}
         <RecenterMap coords={mapCenter} />
       </MapContainer>
     </div>

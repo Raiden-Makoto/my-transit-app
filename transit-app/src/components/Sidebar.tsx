@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react';
-import { X, Star, Clock, Folder, MapPin, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, Star, Clock, Folder, MapPin, ChevronDown, ChevronRight, Map as MapIcon } from 'lucide-react';
 import type { SavedPlacesApi } from '../hooks/useSavedPlaces';
 import type { HistoryApi } from '../hooks/useLocationHistory';
 import { COLLECTION_PLACE_LIMIT, type CollectionsApi } from '../hooks/useCollections';
-import type { SavedLocation } from '../types/location';
+import type { PlaceCollection, SavedLocation } from '../types/location';
 
 type SidebarProps = {
   open: boolean;
@@ -12,9 +12,18 @@ type SidebarProps = {
   history: HistoryApi;
   collections: CollectionsApi;
   onLocationSelect: (location: SavedLocation) => void;
+  onViewList: (list: PlaceCollection) => void;
 };
 
-export default function Sidebar({ open, onClose, savedPlaces, history, collections, onLocationSelect }: SidebarProps) {
+export default function Sidebar({
+  open,
+  onClose,
+  savedPlaces,
+  history,
+  collections,
+  onLocationSelect,
+  onViewList,
+}: SidebarProps) {
   const [expandedList, setExpandedList] = useState<string | null>(null);
 
   const select = (place: SavedLocation) => {
@@ -116,7 +125,20 @@ export default function Sidebar({ open, onClose, savedPlaces, history, collectio
                     (list.places.length === 0 ? (
                       <p className="pl-[60px] pr-4 py-1.5 text-[13px] text-[#5f6368]">No places yet</p>
                     ) : (
-                      list.places.map((place) => (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onViewList(list);
+                            onClose();
+                          }}
+                          className="flex items-center gap-2 ml-[52px] mr-4 my-1 px-3 py-1.5 rounded-full text-[13px] font-medium"
+                          style={{ color: list.color || '#1a73e8', backgroundColor: `${list.color || '#1a73e8'}1a` }}
+                        >
+                          <MapIcon size={16} />
+                          View places on map
+                        </button>
+                        {list.places.map((place) => (
                         <button
                           key={place.id}
                           type="button"
@@ -131,7 +153,8 @@ export default function Sidebar({ open, onClose, savedPlaces, history, collectio
                             )}
                           </span>
                         </button>
-                      ))
+                        ))}
+                      </>
                     ))}
                 </div>
               );
