@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap, useMapEvents } from 'react-leaflet';
+import { Star } from 'lucide-react';
 import L from 'leaflet';
 import SearchBox from './SearchBox';
+import { useSavedPlaces } from '../hooks/useSavedPlaces';
 import type { SearchViewport } from '../hooks/usePlaceSearch';
 import type { SavedLocation } from '../types/location';
 
@@ -81,6 +83,7 @@ export default function MapCanvas() {
   const [destination, setDestination] = useState<SavedLocation | null>(null);
   const [bbox, setBbox] = useState<Bbox | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const savedPlaces = useSavedPlaces();
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -128,7 +131,7 @@ export default function MapCanvas() {
 
   return (
     <div style={{ height: '100vh', width: '100%' }} className="relative">
-      <SearchBox onLocationSelect={handleLocationSelect} viewport={viewport} />
+      <SearchBox onLocationSelect={handleLocationSelect} viewport={viewport} savedPlaces={savedPlaces} />
       <MapContainer
         center={mapCenter}
         zoom={13}
@@ -155,6 +158,27 @@ export default function MapCanvas() {
                   {destination.secondaryText}
                 </>
               )}
+              <br />
+              <button
+                type="button"
+                onClick={() => savedPlaces.toggleSaved(destination)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginTop: 8,
+                  padding: '4px 10px',
+                  border: '1px solid #dadce0',
+                  borderRadius: 9999,
+                  background: savedPlaces.isSaved(destination.id) ? '#e8f0fe' : '#fff',
+                  color: '#1a73e8',
+                  font: '500 13px system-ui, sans-serif',
+                  cursor: 'pointer',
+                }}
+              >
+                <Star size={14} fill={savedPlaces.isSaved(destination.id) ? 'currentColor' : 'none'} />
+                {savedPlaces.isSaved(destination.id) ? 'Saved' : 'Save'}
+              </button>
             </Popup>
           </Marker>
         )}

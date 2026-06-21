@@ -2,13 +2,14 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Search, X, Home, Briefcase, Clock, CornerUpRight, MapPin, Loader2, Trash2, Star } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useLocationHistory } from '../hooks/useLocationHistory';
-import { useSavedPlaces } from '../hooks/useSavedPlaces';
+import type { SavedPlacesApi } from '../hooks/useSavedPlaces';
 import { usePlaceSearch, type SearchViewport } from '../hooks/usePlaceSearch';
 import type { SavedLocation } from '../types/location';
 
 type SearchBoxProps = {
   onLocationSelect?: (location: SavedLocation) => void;
   viewport?: SearchViewport;
+  savedPlaces: SavedPlacesApi;
 };
 
 type Slot = 'home' | 'work';
@@ -17,11 +18,11 @@ function formatAddress(loc: SavedLocation): string {
   return loc.secondaryText || loc.primaryText;
 }
 
-export default function SearchBox({ onLocationSelect, viewport }: SearchBoxProps) {
+export default function SearchBox({ onLocationSelect, viewport, savedPlaces }: SearchBoxProps) {
   const [homeLoc, setHomeLoc] = useLocalStorage<SavedLocation | null>('user_home', null);
   const [workLoc, setWorkLoc] = useLocalStorage<SavedLocation | null>('user_work', null);
   const { recents, addToHistory, removeFromHistory } = useLocationHistory();
-  const { saved, isSaved, toggleSaved, removeSaved } = useSavedPlaces();
+  const { saved, isSaved, toggleSaved, removeSaved } = savedPlaces;
 
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
