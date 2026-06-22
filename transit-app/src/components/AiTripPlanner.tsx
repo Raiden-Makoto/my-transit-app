@@ -78,7 +78,8 @@ export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
     if (Number.isNaN(startMs) || Number.isNaN(endMs)) return 'Please enter valid start and end times.';
     if (startMs < minMs - 60_000) return 'Start time cannot be in the past.';
     if (endMs <= startMs) return 'End time must be after the start time.';
-    if (startMs > maxMs || endMs > maxMs) return 'Trips can only be planned up to 1 week ahead.';
+    if (startMs > maxMs || endMs > maxMs) return 'Trips can only be planned up to 1 week ahead from today.';
+    if (endMs - startMs > 24 * 60 * 60 * 1000) return 'Start and end can be at most 24 hours apart.';
     return null;
   };
 
@@ -164,7 +165,9 @@ export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
               {windowError ? (
                 <p className="mb-3 text-[12px] font-medium text-[#d93025]">{windowError}</p>
               ) : (
-                <p className="mb-3 text-[12px] text-[#9aa0a6]">Trips can be planned up to 1 week ahead.</p>
+                <p className="mb-3 text-[12px] text-[#9aa0a6]">
+                  Up to 1 week ahead from today, with a window of at most 24 hours.
+                </p>
               )}
 
               <div className="mb-2 flex items-center justify-between">
