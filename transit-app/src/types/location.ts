@@ -13,3 +13,9 @@ export interface PlaceCollection {
     color: string;
     places: SavedLocation[];
   }
+
+export interface TripLeg {
+    id: string;
+    from: SavedLocation | null;
+    to: SavedLocation | null;
+  }

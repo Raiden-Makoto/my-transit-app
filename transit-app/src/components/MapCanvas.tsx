@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap, useMapEvents } from 'react-leaflet';
-import { Star, FolderPlus, Menu, X } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, ZoomControl, useMap, useMapEvents } from 'react-leaflet';
+import { Star, FolderPlus, Menu, X, Route } from 'lucide-react';
 import L from 'leaflet';
 import SearchBox from './SearchBox';
 import CollectionPicker from './CollectionPicker';
 import Sidebar from './Sidebar';
+import TripPlanner from './TripPlanner';
 import { useSavedPlaces } from '../hooks/useSavedPlaces';
 import { useCollections } from '../hooks/useCollections';
 import { useLocationHistory } from '../hooks/useLocationHistory';
 import type { SearchViewport } from '../hooks/usePlaceSearch';
-import type { PlaceCollection, SavedLocation } from '../types/location';
+import type { PlaceCollection, SavedLocation, TripLeg } from '../types/location';
 
 type Bbox = [number, number, number, number];
 
@@ -25,6 +26,17 @@ function coloredPinIcon(color: string) {
     iconSize: [26, 38],
     iconAnchor: [13, 38],
     popupAnchor: [0, -32],
+  });
+}
+
+// A circular numbered badge marker for ordered trip stops.
+function numberedPinIcon(n: number) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:#1a73e8;color:#fff;font:700 13px system-ui,sans-serif;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4)">${n}</div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+    popupAnchor: [0, -13],
   });
 }
 
@@ -115,6 +127,8 @@ export default function MapCanvas() {
   const [pickerPlace, setPickerPlace] = useState<SavedLocation | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [viewedList, setViewedList] = useState<PlaceCollection | null>(null);
+  const [tripOpen, setTripOpen] = useState(false);
+  const [tripLegs, setTripLegs] = useState<TripLeg[] | null>(null);
   const savedPlaces = useSavedPlaces();
   const collections = useCollections();
   const history = useLocationHistory();
@@ -149,17 +163,39 @@ export default function MapCanvas() {
     setMapCenter([location.lat, location.lon]);
     setDestination(location);
     setViewedList(null);
+    setTripLegs(null);
   };
 
   const handleViewList = (list: PlaceCollection) => {
     setDestination(null);
+    setTripLegs(null);
     setViewedList(list);
+  };
+
+  const handleShowRoute = (legs: TripLeg[]) => {
+    setDestination(null);
+    setViewedList(null);
+    setTripLegs(legs);
   };
 
   const viewport = useMemo<SearchViewport | undefined>(
     () => (mapCenter ? { lat: mapCenter[0], lon: mapCenter[1], bbox: bbox ?? undefined } : undefined),
     [mapCenter, bbox],
   );
+
+  // Ordered, de-duplicated list of stops across all trip legs.
+  const tripStops = useMemo<SavedLocation[]>(() => {
+    if (!tripLegs) return [];
+    const pts: SavedLocation[] = [];
+    const pushUnique = (loc: SavedLocation | null) => {
+      if (loc && (pts.length === 0 || pts[pts.length - 1].id !== loc.id)) pts.push(loc);
+    };
+    tripLegs.forEach((leg) => {
+      pushUnique(leg.from);
+      pushUnique(leg.to);
+    });
+    return pts;
+  }, [tripLegs]);
 
   if (error && !position) {
     return <div className="p-4 bg-red-100 text-red-700">{error}</div>;
@@ -189,6 +225,23 @@ export default function MapCanvas() {
         <Menu size={22} />
       </button>
 
+      <button
+        type="button"
+        onClick={() => setTripOpen(true)}
+        className="absolute bottom-6 left-3 z-[1000] flex items-center gap-2 h-11 px-4 bg-[#1a73e8] rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.3)] text-[14px] font-medium text-white hover:bg-[#1765cc] transition-colors font-sans"
+        aria-label="Plan a trip"
+      >
+        <Route size={18} />
+        Plan trip
+      </button>
+
+      <TripPlanner
+        open={tripOpen}
+        onClose={() => setTripOpen(false)}
+        viewport={viewport}
+        onShowRoute={handleShowRoute}
+      />
+
       {viewedList && (
         <button
           type="button"
@@ -201,6 +254,21 @@ export default function MapCanvas() {
             style={{ backgroundColor: viewedList.color || '#1a73e8' }}
           />
           <span className="max-w-[160px] truncate">{viewedList.name}</span>
+          <span className="flex items-center justify-center rounded-full p-1 text-[#5f6368] hover:bg-[#f1f3f4]">
+            <X size={16} />
+          </span>
+        </button>
+      )}
+
+      {tripLegs && (
+        <button
+          type="button"
+          onClick={() => setTripLegs(null)}
+          className="absolute top-3 right-3 z-[1000] flex items-center gap-2 h-10 pl-4 pr-3 bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#202124] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
+          aria-label="Clear trip route"
+        >
+          <Route size={16} className="text-[#1a73e8]" />
+          <span>Trip route</span>
           <span className="flex items-center justify-center rounded-full p-1 text-[#5f6368] hover:bg-[#f1f3f4]">
             <X size={16} />
           </span>
@@ -304,6 +372,33 @@ export default function MapCanvas() {
           </Marker>
         ))}
         {viewedList && viewedList.places.length > 0 && <FitBounds places={viewedList.places} />}
+
+        {tripLegs?.map((leg) =>
+          leg.from && leg.to ? (
+            <Polyline
+              key={leg.id}
+              positions={[
+                [leg.from.lat, leg.from.lon],
+                [leg.to.lat, leg.to.lon],
+              ]}
+              pathOptions={{ color: '#1a73e8', weight: 4, opacity: 0.75 }}
+            />
+          ) : null,
+        )}
+        {tripStops.map((stop, i) => (
+          <Marker key={`${stop.id}_${i}`} position={[stop.lat, stop.lon]} icon={numberedPinIcon(i + 1)}>
+            <Popup>
+              <strong>{stop.primaryText}</strong>
+              {stop.secondaryText && (
+                <>
+                  <br />
+                  {stop.secondaryText}
+                </>
+              )}
+            </Popup>
+          </Marker>
+        ))}
+        {tripStops.length > 0 && <FitBounds places={tripStops} />}
         <RecenterMap coords={mapCenter} />
       </MapContainer>
     </div>
