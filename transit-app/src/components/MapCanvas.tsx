@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, ZoomControl, useMap, useMapEvents } from 'react-leaflet';
-import { Star, FolderPlus, Menu, X, Route } from 'lucide-react';
+import { Star, FolderPlus, Menu, X, Route, Sparkles } from 'lucide-react';
 import L from 'leaflet';
 import SearchBox from './SearchBox';
 import CollectionPicker from './CollectionPicker';
@@ -132,6 +132,7 @@ export default function MapCanvas() {
   const [tripOpen, setTripOpen] = useState(false);
   const [tripLegs, setTripLegs] = useState<TripLeg[] | null>(null);
   const [tripInitialLegs, setTripInitialLegs] = useState<TripLeg[] | null>(null);
+  const [aiStops, setAiStops] = useState<SavedLocation[] | null>(null);
   const savedPlaces = useSavedPlaces();
   const collections = useCollections();
   const history = useLocationHistory();
@@ -167,18 +168,29 @@ export default function MapCanvas() {
     setDestination(location);
     setViewedList(null);
     setTripLegs(null);
+    setAiStops(null);
   };
 
   const handleViewList = (list: PlaceCollection) => {
     setDestination(null);
     setTripLegs(null);
+    setAiStops(null);
     setViewedList(list);
   };
 
   const handleShowRoute = (legs: TripLeg[]) => {
     setDestination(null);
     setViewedList(null);
+    setAiStops(null);
     setTripLegs(legs);
+  };
+
+  const handleShowAiStops = (places: SavedLocation[]) => {
+    setDestination(null);
+    setViewedList(null);
+    setTripLegs(null);
+    setAiStops(places);
+    setAiList(null);
   };
 
   const handleGetDirections = (place: SavedLocation) => {
@@ -306,7 +318,22 @@ export default function MapCanvas() {
         onPlanWithAi={setAiList}
       />
 
-      <AiTripPlanner list={aiList} onClose={() => setAiList(null)} />
+      <AiTripPlanner list={aiList} onClose={() => setAiList(null)} onShowOnMap={handleShowAiStops} />
+
+      {aiStops && aiStops.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setAiStops(null)}
+          className="absolute top-3 right-3 z-[1000] flex items-center gap-2 h-10 pl-4 pr-3 bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#202124] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
+          aria-label="Clear AI itinerary pins"
+        >
+          <Sparkles size={16} className="text-[#7b1fa2]" />
+          <span>AI itinerary</span>
+          <span className="flex items-center justify-center rounded-full p-1 text-[#5f6368] hover:bg-[#f1f3f4]">
+            <X size={16} />
+          </span>
+        </button>
+      )}
 
       {pickerPlace && (
         <CollectionPicker place={pickerPlace} collections={collections} onClose={() => setPickerPlace(null)} />
@@ -462,6 +489,21 @@ export default function MapCanvas() {
           </Marker>
         ))}
         {tripStops.length > 0 && <FitBounds places={tripStops} />}
+
+        {aiStops?.map((stop, i) => (
+          <Marker key={`ai_${stop.id}_${i}`} position={[stop.lat, stop.lon]} icon={numberedPinIcon(i + 1)}>
+            <Popup>
+              <strong>{stop.primaryText}</strong>
+              {stop.secondaryText && (
+                <>
+                  <br />
+                  {stop.secondaryText}
+                </>
+              )}
+            </Popup>
+          </Marker>
+        ))}
+        {aiStops && aiStops.length > 0 && <FitBounds places={aiStops} />}
         <RecenterMap coords={mapCenter} />
       </MapContainer>
     </div>

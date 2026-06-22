@@ -1,17 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Sparkles, Square, CheckSquare, Loader2, ArrowLeft, MapPin, Folder } from 'lucide-react';
-import { planTrip, type Itinerary } from '../services/planTrip';
-import type { PlaceCollection } from '../types/location';
-
-// Render a minutes count as a friendly duration, e.g. "1 hr 30 min".
-function formatDuration(minutes: number): string {
-  const hrs = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  const parts: string[] = [];
-  if (hrs > 0) parts.push(`${hrs} hr`);
-  if (mins > 0) parts.push(`${mins} min`);
-  return parts.join(' ') || '0 min';
-}
+import { X, Sparkles, Square, CheckSquare, Loader2, ArrowLeft, MapPin, Folder, Map as MapIcon } from 'lucide-react';
+import ReactMarkdown, { type Components } from 'react-markdown';
+import {
+  streamPlanTrip,
+  displayMarkdown,
+  parseItineraryData,
+  resolveStops,
+} from '../services/planTrip';
+import type { PlaceCollection, SavedLocation } from '../types/location';
 
 // Format a Date as a value for <input type="datetime-local"> in local time.
 function toLocalInput(date: Date): string {
@@ -21,19 +17,30 @@ function toLocalInput(date: Date): string {
   )}`;
 }
 
+const markdownComponents: Components = {
+  p: ({ children }) => <p className="mb-2 text-[14px] leading-relaxed text-[#202124]">{children}</p>,
+  ol: ({ children }) => <ol className="mb-2 list-decimal space-y-1.5 pl-5 text-[14px] text-[#202124]">{children}</ol>,
+  ul: ({ children }) => <ul className="mb-2 list-disc space-y-1.5 pl-5 text-[14px] text-[#202124]">{children}</ul>,
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  strong: ({ children }) => <strong className="font-semibold text-[#202124]">{children}</strong>,
+  h1: ({ children }) => <h3 className="mb-2 text-[16px] font-semibold text-[#202124]">{children}</h3>,
+  h2: ({ children }) => <h3 className="mb-2 text-[16px] font-semibold text-[#202124]">{children}</h3>,
+  h3: ({ children }) => <h3 className="mb-2 text-[15px] font-semibold text-[#202124]">{children}</h3>,
+};
+
 type AiTripPlannerProps = {
   list: PlaceCollection | null;
   onClose: () => void;
+  onShowOnMap: (places: SavedLocation[]) => void;
 };
 
-export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
+export default function AiTripPlanner({ list, onClose, onShowOnMap }: AiTripPlannerProps) {
   const { nowInput, defaultEndInput, minMs, maxMs } = useMemo(() => {
     const now = new Date();
     const maxDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 1 week ahead
     const defaultEnd = new Date(now.getTime() + 9 * 60 * 60 * 1000); // +9h, clamped
     return {
       nowInput: toLocalInput(now),
-      maxInput: toLocalInput(maxDate),
       defaultEndInput: toLocalInput(defaultEnd < maxDate ? defaultEnd : maxDate),
       minMs: now.getTime(),
       maxMs: maxDate.getTime(),
@@ -43,19 +50,23 @@ export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [start, setStart] = useState(nowInput);
   const [end, setEnd] = useState(defaultEndInput);
-  const [loading, setLoading] = useState(false);
+  const [started, setStarted] = useState(false);
+  const [streaming, setStreaming] = useState(false);
+  const [text, setText] = useState('');
+  const [pins, setPins] = useState<SavedLocation[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<Itinerary | null>(null);
 
-  // Reset all state whenever a new list opens the planner.
+  // Reset everything whenever a new list opens the planner.
   useEffect(() => {
     if (list) {
       setSelected(new Set(list.places.map((p) => p.id)));
       setStart(nowInput);
       setEnd(defaultEndInput);
-      setLoading(false);
+      setStarted(false);
+      setStreaming(false);
+      setText('');
+      setPins([]);
       setError(null);
-      setResult(null);
     }
   }, [list, nowInput, defaultEndInput]);
 
@@ -92,18 +103,31 @@ export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
       return;
     }
     setError(null);
-    setLoading(true);
+    setStarted(true);
+    setStreaming(true);
+    setText('');
+    setPins([]);
     try {
-      const itinerary = await planTrip(chosen, start, end);
-      setResult(itinerary);
+      const full = await streamPlanTrip(chosen, start, end, setText);
+      const data = parseItineraryData(full);
+      if (data) setPins(resolveStops(data, chosen));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to plan trip.');
     } finally {
-      setLoading(false);
+      setStreaming(false);
     }
   };
 
+  const backToForm = () => {
+    setStarted(false);
+    setStreaming(false);
+    setText('');
+    setPins([]);
+    setError(null);
+  };
+
   const windowError = validateWindow();
+  const markdown = displayMarkdown(text);
 
   return (
     <div className="absolute inset-0 z-[1300] flex items-center justify-center p-4 font-sans">
@@ -138,8 +162,20 @@ export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          {result ? (
-            <Result itinerary={result} />
+          {started ? (
+            <div>
+              {streaming && !markdown && (
+                <div className="flex items-center gap-2 text-[14px] text-[#5f6368]">
+                  <Loader2 size={18} className="animate-spin text-[#7b1fa2]" />
+                  Planning your trip…
+                </div>
+              )}
+              {markdown && <ReactMarkdown components={markdownComponents}>{markdown}</ReactMarkdown>}
+              {streaming && markdown && (
+                <span className="inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-[#7b1fa2]" />
+              )}
+              {error && <p className="mt-3 text-[13px] text-[#d93025]">{error}</p>}
+            </div>
           ) : (
             <>
               <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -219,20 +255,32 @@ export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 border-t border-[#eceff1] px-5 py-3 shrink-0">
-          {result ? (
+          {started ? (
             <>
               <button
                 type="button"
-                onClick={() => setResult(null)}
-                className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[14px] font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
+                onClick={backToForm}
+                disabled={streaming}
+                className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[14px] font-medium text-[#5f6368] hover:bg-[#f1f3f4] disabled:opacity-40"
               >
                 <ArrowLeft size={16} />
                 Back
               </button>
+              {!streaming && pins.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onShowOnMap(pins)}
+                  className="flex items-center gap-2 rounded-full px-5 py-2 text-[14px] font-medium text-white bg-[#7b1fa2] hover:bg-[#6a1b9a]"
+                >
+                  <MapIcon size={16} />
+                  Show on map
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-full px-5 py-2 text-[14px] font-medium text-white bg-[#7b1fa2] hover:bg-[#6a1b9a]"
+                disabled={streaming}
+                className="rounded-full px-5 py-2 text-[14px] font-medium text-[#5f6368] hover:bg-[#f1f3f4] disabled:opacity-40"
               >
                 Done
               </button>
@@ -242,54 +290,23 @@ export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
               <button
                 type="button"
                 onClick={onClose}
-                disabled={loading}
-                className="rounded-full px-4 py-2 text-[14px] font-medium text-[#5f6368] hover:bg-[#f1f3f4] disabled:opacity-40"
+                className="rounded-full px-4 py-2 text-[14px] font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={submit}
-                disabled={selected.size === 0 || loading || windowError !== null}
+                disabled={selected.size === 0 || windowError !== null}
                 className="flex items-center gap-2 rounded-full px-5 py-2 text-[14px] font-medium text-white bg-[#7b1fa2] hover:bg-[#6a1b9a] disabled:opacity-40"
               >
-                {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                {loading ? 'Planning…' : 'Plan with AI'}
+                <Sparkles size={16} />
+                Plan with AI
               </button>
             </>
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function Result({ itinerary }: { itinerary: Itinerary }) {
-  return (
-    <div>
-      {itinerary.summary && <p className="text-[14px] text-[#202124]">{itinerary.summary}</p>}
-      {itinerary.truncatedToFirstDay && (
-        <p className="mt-2 rounded-lg bg-[#fef7e0] px-3 py-2 text-[13px] font-medium text-[#b06000]">
-          Not enough time for everything — showing the first day only.
-        </p>
-      )}
-
-      <ol className="mt-4 space-y-3">
-        {itinerary.stops.map((stop, i) => (
-          <li key={`${stop.name}_${i}`} className="flex gap-3">
-            <span className="flex items-center justify-center w-7 h-7 mt-0.5 shrink-0 rounded-full bg-[#7b1fa2] text-white text-[13px] font-bold">
-              {i + 1}
-            </span>
-            <div className="min-w-0">
-              <p className="text-[15px] font-medium text-[#202124]">{stop.name}</p>
-              {stop.durationMinutes > 0 && (
-                <p className="text-[13px] text-[#5f6368]">{formatDuration(stop.durationMinutes)}</p>
-              )}
-              {stop.note && <p className="text-[13px] text-[#5f6368] italic">{stop.note}</p>}
-            </div>
-          </li>
-        ))}
-      </ol>
     </div>
   );
 }

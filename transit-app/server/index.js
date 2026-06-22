@@ -11,54 +11,26 @@ const HF_TOKEN = process.env.HF_TOKEN;
 const HF_MODEL = process.env.HF_MODEL || 'mistralai/Mistral-7B-Instruct-v0.3';
 const HF_URL = 'https://router.huggingface.co/v1/chat/completions';
 
-/**
- * Pull the first balanced {...} JSON object out of a string. The model is
- * instructed to return pure JSON, but smaller models sometimes wrap it in
- * prose or code fences, so we extract defensively.
- */
-function extractJson(text) {
-  if (!text) return null;
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1] : text;
-  const start = candidate.indexOf('{');
-  if (start === -1) return null;
-  let depth = 0;
-  for (let i = start; i < candidate.length; i++) {
-    if (candidate[i] === '{') depth++;
-    else if (candidate[i] === '}') {
-      depth--;
-      if (depth === 0) {
-        try {
-          return JSON.parse(candidate.slice(start, i + 1));
-        } catch {
-          return null;
-        }
-      }
-    }
-  }
-  return null;
-}
-
 function buildMessages({ places, start, end }) {
   const placeLines = places
-    .map((p, i) => `${i + 1}. ${p.name}${p.address ? ` (${p.address})` : ''} [lat ${p.lat}, lon ${p.lon}]`)
+    .map((p, i) => `${i + 1}. [id: ${p.id}] ${p.name}${p.address ? ` (${p.address})` : ''} [lat ${p.lat}, lon ${p.lon}]`)
     .join('\n');
 
   const system = [
-    'You are a local trip-planning assistant.',
+    'You are a friendly local trip-planning assistant.',
     'Given a set of places and an available time window, decide the best order to visit them and a recommended time to spend AT each place (e.g. CN Tower: 1 hour, Ripley\'s Aquarium: 2 hours).',
-    'Use approximate travel time between consecutive places (based on their coordinates) ONLY to judge how many places realistically fit in the window. Do NOT report travel times or clock times in the output.',
+    'Use approximate travel time between consecutive places (based on their coordinates) ONLY to judge how many places realistically fit in the window. Do NOT report travel times or clock times.',
     'A place fits if the total of (time spent at places already scheduled) + (approximate travel between them) + (time spent here) stays within the window.',
-    'If not everything fits, include only the places that fit on the FIRST day and set "truncatedToFirstDay" to true.',
-    'Respond with STRICT JSON only — no prose, no markdown fences — matching exactly this shape:',
-    '{',
-    '  "stops": [',
-    '    { "name": string, "durationMinutes": number, "note": string }',
-    '  ],',
-    '  "truncatedToFirstDay": boolean,',
-    '  "summary": string',
-    '}',
-    'stops are in visit order. durationMinutes is the recommended time spent at that place. "note" is a short tip (<= 12 words).',
+    'If not everything fits, include only the places that fit on the FIRST day and mention this to the user.',
+    '',
+    'FORMAT YOUR RESPONSE IN TWO PARTS:',
+    '1. A short, friendly Markdown itinerary: a brief intro sentence, then a numbered list where each item is "**Place name** — recommended duration" followed by a one-line tip. If you had to drop places, add a short note about it.',
+    '2. AFTER the Markdown, output a fenced ```json code block (this will be hidden from the user) with this exact shape:',
+    '```json',
+    '{ "stops": [ { "id": string, "name": string, "durationMinutes": number, "note": string } ], "truncatedToFirstDay": boolean }',
+    '```',
+    'In the JSON, "id" MUST be the exact id given for that place, "stops" are in visit order, and durationMinutes is the recommended minutes spent there.',
+    'Only include places from the provided list. Always include the JSON block last.',
   ].join('\n');
 
   const user = [
@@ -66,7 +38,7 @@ function buildMessages({ places, start, end }) {
     `Places to visit (${places.length}):`,
     placeLines,
     '',
-    'Return the JSON itinerary now.',
+    'Write the Markdown itinerary, then the hidden JSON block.',
   ].join('\n');
 
   return [
@@ -88,8 +60,9 @@ app.post('/api/plan-trip', async (req, res) => {
     return res.status(400).json({ error: 'Both start and end times are required.' });
   }
 
+  let hfRes;
   try {
-    const hfRes = await fetch(HF_URL, {
+    hfRes = await fetch(HF_URL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${HF_TOKEN}`,
@@ -100,28 +73,60 @@ app.post('/api/plan-trip', async (req, res) => {
         messages: buildMessages({ places, start, end }),
         temperature: 0.3,
         max_tokens: 1024,
+        stream: true,
       }),
     });
-
-    if (!hfRes.ok) {
-      const detail = await hfRes.text();
-      console.error(`[plan-trip] Hugging Face error ${hfRes.status} ${hfRes.statusText}:`, detail);
-      return res.status(502).json({ error: `Hugging Face request failed (${hfRes.status}).`, detail });
-    }
-
-    const data = await hfRes.json();
-    const content = data?.choices?.[0]?.message?.content ?? '';
-    const itinerary = extractJson(content);
-
-    if (!itinerary) {
-      console.error('[plan-trip] Could not parse itinerary from model response:', content);
-      return res.status(502).json({ error: 'Could not parse an itinerary from the model response.', raw: content });
-    }
-
-    return res.json({ itinerary });
   } catch (err) {
-    console.error('[plan-trip] Unexpected server error:', err);
-    return res.status(500).json({ error: 'Unexpected server error.', detail: String(err) });
+    console.error('[plan-trip] Failed to reach Hugging Face:', err);
+    return res.status(502).json({ error: 'Could not reach Hugging Face.', detail: String(err) });
+  }
+
+  if (!hfRes.ok || !hfRes.body) {
+    const detail = await hfRes.text().catch(() => '');
+    console.error(`[plan-trip] Hugging Face error ${hfRes.status} ${hfRes.statusText}:`, detail);
+    return res.status(502).json({ error: `Hugging Face request failed (${hfRes.status}).`, detail });
+  }
+
+  // Stream tokens to the client as Server-Sent Events.
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    for await (const chunk of hfRes.body) {
+      buffer += decoder.decode(chunk, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const payload = trimmed.slice(5).trim();
+        if (payload === '[DONE]') {
+          res.write('data: [DONE]\n\n');
+          res.end();
+          return;
+        }
+        try {
+          const json = JSON.parse(payload);
+          const delta = json?.choices?.[0]?.delta?.content;
+          if (delta) res.write(`data: ${JSON.stringify({ delta })}\n\n`);
+        } catch {
+          // ignore keep-alive comments / partial frames
+        }
+      }
+    }
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (err) {
+    console.error('[plan-trip] Stream error:', err);
+    // If nothing was sent yet we could still send JSON, but headers are flushed,
+    // so emit an SSE error event instead.
+    res.write(`data: ${JSON.stringify({ error: 'Stream interrupted.' })}\n\n`);
+    res.end();
   }
 });
 
