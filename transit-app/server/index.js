@@ -71,8 +71,6 @@ function buildMessages({ places, start, end }) {
     .map((p, i) => `${i + 1}. [id: ${p.id}] ${p.name}${p.address ? ` (${p.address})` : ''} [lat ${p.lat}, lon ${p.lon}]`)
     .join('\n');
 
-  // Mistral's chat template has no "system" role, so the instructions are
-  // folded into the user turn to stay portable across providers.
   const instructions = [
     'You are a friendly local trip-planning assistant.',
     'Given a set of places and an available time window, decide the best order to visit them and a recommended time to spend AT each place (e.g. CN Tower: 1 hour, Ripley\'s Aquarium: 2 hours).',
@@ -98,7 +96,10 @@ function buildMessages({ places, start, end }) {
     'Write the Markdown itinerary, then the hidden JSON block.',
   ].join('\n');
 
-  return [{ role: 'user', content: `${instructions}\n\n---\n\n${request}` }];
+  return [
+    { role: 'system', content: instructions },
+    { role: 'user', content: request },
+  ];
 }
 
 app.post('/api/plan-trip', async (req, res) => {
