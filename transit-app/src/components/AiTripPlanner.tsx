@@ -99,7 +99,9 @@ export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
               <Sparkles size={20} />
             </span>
             <div className="min-w-0">
-              <h2 className="m-0 text-[18px] font-semibold text-[#202124] truncate">Plan trip with AI</h2>
+              <h2 className="mt-1 mb-0 text-[18px] font-semibold truncate" style={{ color: '#000' }}>
+                Plan trip with AI
+              </h2>
               <p className="m-0 text-[13px] text-[#5f6368] truncate flex items-center gap-1">
                 <Folder size={13} style={{ color: list.color || '#5f6368' }} />
                 {list.name}
