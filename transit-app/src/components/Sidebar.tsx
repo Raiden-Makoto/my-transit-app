@@ -1,5 +1,17 @@
 import { useState, type ReactNode } from 'react';
-import { X, Star, Clock, Folder, MapPin, ChevronDown, ChevronRight, Map as MapIcon } from 'lucide-react';
+import {
+  X,
+  Star,
+  Clock,
+  Folder,
+  MapPin,
+  ChevronDown,
+  ChevronRight,
+  Map as MapIcon,
+  Sparkles,
+  Square,
+  CheckSquare,
+} from 'lucide-react';
 import type { SavedPlacesApi } from '../hooks/useSavedPlaces';
 import type { HistoryApi } from '../hooks/useLocationHistory';
 import { COLLECTION_PLACE_LIMIT, type CollectionsApi } from '../hooks/useCollections';
@@ -25,10 +37,39 @@ export default function Sidebar({
   onViewList,
 }: SidebarProps) {
   const [expandedList, setExpandedList] = useState<string | null>(null);
+  // Which list (if any) is currently in "Plan trip with AI" selection mode.
+  const [aiListId, setAiListId] = useState<string | null>(null);
+  const [aiSelected, setAiSelected] = useState<Set<string>>(new Set());
 
   const select = (place: SavedLocation) => {
     onLocationSelect(place);
     onClose();
+  };
+
+  const startAiMode = (listId: string) => {
+    setAiListId(listId);
+    setAiSelected(new Set());
+  };
+
+  const exitAiMode = () => {
+    setAiListId(null);
+    setAiSelected(new Set());
+  };
+
+  const toggleAiSelect = (placeId: string) => {
+    setAiSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(placeId)) next.delete(placeId);
+      else next.add(placeId);
+      return next;
+    });
+  };
+
+  const planWithAi = (list: PlaceCollection) => {
+    const chosen = list.places.filter((p) => aiSelected.has(p.id));
+    // AI agent integration is not wired up yet; this is a placeholder.
+    console.log('[Plan trip with AI] selected places:', chosen);
+    exitAiMode();
   };
 
   return (
@@ -98,11 +139,15 @@ export default function Sidebar({
           ) : (
             collections.collections.map((list) => {
               const expanded = expandedList === list.id;
+              const aiMode = aiListId === list.id;
               return (
                 <div key={list.id} className="mb-1">
                   <button
                     type="button"
-                    onClick={() => setExpandedList(expanded ? null : list.id)}
+                    onClick={() => {
+                      if (expanded && aiMode) exitAiMode();
+                      setExpandedList(expanded ? null : list.id);
+                    }}
                     className="flex w-full items-center px-4 py-2 text-left transition-colors hover:bg-[#f5f5f5]"
                   >
                     <span
@@ -126,34 +171,99 @@ export default function Sidebar({
                       <p className="pl-[60px] pr-4 py-1.5 text-[13px] text-[#5f6368]">No places yet</p>
                     ) : (
                       <>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onViewList(list);
-                            onClose();
-                          }}
-                          className="flex items-center gap-2 ml-[52px] mr-4 my-1 px-3 py-1.5 rounded-full text-[13px] font-medium"
-                          style={{ color: list.color || '#1a73e8', backgroundColor: `${list.color || '#1a73e8'}1a` }}
-                        >
-                          <MapIcon size={16} />
-                          View places on map
-                        </button>
-                        {list.places.map((place) => (
-                        <button
-                          key={place.id}
-                          type="button"
-                          onClick={() => select(place)}
-                          className="flex w-full items-center pl-[52px] pr-4 py-2 text-left transition-colors hover:bg-[#f5f5f5]"
-                        >
-                          <MapPin size={16} className="mr-3 shrink-0 text-[#5f6368]" />
-                          <span className="flex-1 min-w-0">
-                            <span className="block text-[14px] truncate">{place.primaryText}</span>
-                            {place.secondaryText && (
-                              <span className="block text-[12px] text-[#5f6368] truncate">{place.secondaryText}</span>
-                            )}
-                          </span>
-                        </button>
-                        ))}
+                        <div className="flex flex-wrap gap-2 ml-[52px] mr-4 my-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onViewList(list);
+                              onClose();
+                            }}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium"
+                            style={{ color: list.color || '#1a73e8', backgroundColor: `${list.color || '#1a73e8'}1a` }}
+                          >
+                            <MapIcon size={16} />
+                            View places on map
+                          </button>
+                          {!aiMode && (
+                            <button
+                              type="button"
+                              onClick={() => startAiMode(list.id)}
+                              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium text-[#7b1fa2] bg-[#7b1fa2]/10"
+                            >
+                              <Sparkles size={16} />
+                              Plan trip with AI
+                            </button>
+                          )}
+                        </div>
+
+                        {aiMode && (
+                          <p className="pl-[52px] pr-4 pt-1 text-[12px] text-[#5f6368]">
+                            Select the places to include, then plan with AI.
+                          </p>
+                        )}
+
+                        {list.places.map((place) =>
+                          aiMode ? (
+                            <button
+                              key={place.id}
+                              type="button"
+                              onClick={() => toggleAiSelect(place.id)}
+                              className="flex w-full items-center pl-[52px] pr-4 py-2 text-left transition-colors hover:bg-[#f5f5f5]"
+                            >
+                              {aiSelected.has(place.id) ? (
+                                <CheckSquare size={18} className="mr-3 shrink-0 text-[#7b1fa2]" />
+                              ) : (
+                                <Square size={18} className="mr-3 shrink-0 text-[#5f6368]" />
+                              )}
+                              <span className="flex-1 min-w-0">
+                                <span className="block text-[14px] truncate">{place.primaryText}</span>
+                                {place.secondaryText && (
+                                  <span className="block text-[12px] text-[#5f6368] truncate">
+                                    {place.secondaryText}
+                                  </span>
+                                )}
+                              </span>
+                            </button>
+                          ) : (
+                            <button
+                              key={place.id}
+                              type="button"
+                              onClick={() => select(place)}
+                              className="flex w-full items-center pl-[52px] pr-4 py-2 text-left transition-colors hover:bg-[#f5f5f5]"
+                            >
+                              <MapPin size={16} className="mr-3 shrink-0 text-[#5f6368]" />
+                              <span className="flex-1 min-w-0">
+                                <span className="block text-[14px] truncate">{place.primaryText}</span>
+                                {place.secondaryText && (
+                                  <span className="block text-[12px] text-[#5f6368] truncate">
+                                    {place.secondaryText}
+                                  </span>
+                                )}
+                              </span>
+                            </button>
+                          ),
+                        )}
+
+                        {aiMode && (
+                          <div className="flex items-center gap-2 ml-[52px] mr-4 my-2">
+                            <button
+                              type="button"
+                              onClick={() => planWithAi(list)}
+                              disabled={aiSelected.size === 0}
+                              className="flex items-center gap-2 px-4 py-1.5 rounded-full text-[13px] font-medium text-white bg-[#7b1fa2] hover:bg-[#6a1b9a] disabled:opacity-40"
+                            >
+                              <Sparkles size={16} />
+                              Plan with AI ({aiSelected.size})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={exitAiMode}
+                              className="px-3 py-1.5 rounded-full text-[13px] font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
                       </>
                     ))}
                 </div>
