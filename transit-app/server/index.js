@@ -46,21 +46,19 @@ function buildMessages({ places, start, end }) {
 
   const system = [
     'You are a local trip-planning assistant.',
-    'Given a set of places and an available time window, decide the best order to visit them and how long to spend AT each place.',
-    'Do NOT account for travel time between places — assume moving between stops is instantaneous.',
-    'Only consider the total time SPENT at the places to decide how many fit in the window.',
-    'Schedule stops back-to-back: each stop\'s arrive time equals the previous stop\'s depart time.',
-    'If the places cannot all fit within the given window, plan only what fits on the FIRST day and set "truncatedToFirstDay" to true.',
+    'Given a set of places and an available time window, decide the best order to visit them and a recommended time to spend AT each place (e.g. CN Tower: 1 hour, Ripley\'s Aquarium: 2 hours).',
+    'Use approximate travel time between consecutive places (based on their coordinates) ONLY to judge how many places realistically fit in the window. Do NOT report travel times or clock times in the output.',
+    'A place fits if the total of (time spent at places already scheduled) + (approximate travel between them) + (time spent here) stays within the window.',
+    'If not everything fits, include only the places that fit on the FIRST day and set "truncatedToFirstDay" to true.',
     'Respond with STRICT JSON only — no prose, no markdown fences — matching exactly this shape:',
     '{',
     '  "stops": [',
-    '    { "name": string, "arrive": "HH:MM", "depart": "HH:MM", "durationMinutes": number, "note": string }',
+    '    { "name": string, "durationMinutes": number, "note": string }',
     '  ],',
     '  "truncatedToFirstDay": boolean,',
     '  "summary": string',
     '}',
-    'durationMinutes is the time spent at that place; depart = arrive + durationMinutes.',
-    'Times must be 24-hour HH:MM within the provided window. "note" is a short tip (<= 12 words).',
+    'stops are in visit order. durationMinutes is the recommended time spent at that place. "note" is a short tip (<= 12 words).',
   ].join('\n');
 
   const user = [

@@ -20,6 +20,16 @@ import { COLLECTION_PLACE_LIMIT, type CollectionsApi } from '../hooks/useCollect
 import type { PlaceCollection, SavedLocation } from '../types/location';
 import { planTrip, type Itinerary } from '../services/planTrip';
 
+// Render a minutes count as a friendly duration, e.g. "1 hr 30 min".
+function formatDuration(minutes: number): string {
+  const hrs = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  const parts: string[] = [];
+  if (hrs > 0) parts.push(`${hrs} hr`);
+  if (mins > 0) parts.push(`${mins} min`);
+  return parts.join(' ') || '0 min';
+}
+
 // Format a Date as a value for <input type="datetime-local"> in local time.
 function toLocalInput(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -384,10 +394,9 @@ function ItineraryResult({
             </span>
             <div className="min-w-0">
               <p className="text-[13px] font-medium text-[#202124] truncate">{stop.name}</p>
-              <p className="text-[12px] text-[#5f6368]">
-                {stop.arrive}–{stop.depart}
-                {stop.durationMinutes ? ` · ${stop.durationMinutes} min` : ''}
-              </p>
+              {stop.durationMinutes > 0 && (
+                <p className="text-[12px] text-[#5f6368]">{formatDuration(stop.durationMinutes)}</p>
+              )}
               {stop.note && <p className="text-[12px] text-[#5f6368] italic">{stop.note}</p>}
             </div>
           </li>

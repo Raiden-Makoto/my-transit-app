@@ -2,8 +2,6 @@ import type { SavedLocation } from '../types/location';
 
 export interface ItineraryStop {
   name: string;
-  arrive: string;
-  depart: string;
   durationMinutes: number;
   note: string;
 }
