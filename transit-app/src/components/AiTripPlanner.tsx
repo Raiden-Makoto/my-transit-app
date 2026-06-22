@@ -27,7 +27,7 @@ type AiTripPlannerProps = {
 };
 
 export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
-  const { nowInput, maxInput, defaultEndInput, minMs, maxMs } = useMemo(() => {
+  const { nowInput, defaultEndInput, minMs, maxMs } = useMemo(() => {
     const now = new Date();
     const maxDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 1 week ahead
     const defaultEnd = new Date(now.getTime() + 9 * 60 * 60 * 1000); // +9h, clamped
@@ -147,8 +147,6 @@ export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
                   <input
                     type="datetime-local"
                     value={start}
-                    min={nowInput}
-                    max={maxInput}
                     onChange={(e) => setStart(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-[#dadce0] px-3 py-2 text-[14px] text-[#202124] focus:border-[#7b1fa2] focus:outline-none"
                   />
@@ -158,8 +156,6 @@ export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
                   <input
                     type="datetime-local"
                     value={end}
-                    min={start}
-                    max={maxInput}
                     onChange={(e) => setEnd(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-[#dadce0] px-3 py-2 text-[14px] text-[#202124] focus:border-[#7b1fa2] focus:outline-none"
                   />
