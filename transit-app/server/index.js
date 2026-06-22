@@ -1,6 +1,14 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
+
+// Load env from the app root, with .env.local taking precedence over .env.
+// (Plain `dotenv/config` only reads `.env`, so it would miss `.env.local`.)
+const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+dotenv.config({ path: path.join(appRoot, '.env') });
+dotenv.config({ path: path.join(appRoot, '.env.local'), override: true });
 
 const app = express();
 app.use(cors());
@@ -8,7 +16,7 @@ app.use(express.json({ limit: '256kb' }));
 
 const PORT = process.env.PORT || 8787;
 const HF_TOKEN = process.env.HF_TOKEN;
-const HF_MODEL = process.env.HF_MODEL || 'mistralai/Mistral-7B-Instruct-v0.3';
+const HF_MODEL = process.env.HF_MODEL || 'meta-llama/Llama-3.1-8B-Instruct';
 const HF_URL = 'https://router.huggingface.co/v1/chat/completions';
 
 // Transient HF statuses worth retrying (model loading, rate limit, gateway).
