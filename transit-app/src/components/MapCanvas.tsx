@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, ZoomControl, useMap, useMapEvents } from 'react-leaflet';
 import { Star, FolderPlus, Menu, X, Route, Sparkles } from 'lucide-react';
 import L from 'leaflet';
@@ -6,7 +6,9 @@ import SearchBox from './SearchBox';
 import CollectionPicker from './CollectionPicker';
 import Sidebar from './Sidebar';
 import TripPlanner from './TripPlanner';
-import AiTripPlanner from './AiTripPlanner';
+
+// Lazy-loaded so react-markdown only loads when the AI planner is opened.
+const AiTripPlanner = lazy(() => import('./AiTripPlanner'));
 import { useSavedPlaces } from '../hooks/useSavedPlaces';
 import { useCollections } from '../hooks/useCollections';
 import { useLocationHistory } from '../hooks/useLocationHistory';
@@ -318,7 +320,11 @@ export default function MapCanvas() {
         onPlanWithAi={setAiList}
       />
 
-      <AiTripPlanner list={aiList} onClose={() => setAiList(null)} onShowOnMap={handleShowAiStops} />
+      {aiList && (
+        <Suspense fallback={null}>
+          <AiTripPlanner list={aiList} onClose={() => setAiList(null)} onShowOnMap={handleShowAiStops} />
+        </Suspense>
+      )}
 
       {aiStops && aiStops.length > 0 && (
         <button
