@@ -182,7 +182,7 @@ export default function Sidebar({
                             style={{ color: list.color || '#1a73e8', backgroundColor: `${list.color || '#1a73e8'}1a` }}
                           >
                             <MapIcon size={16} />
-                            View places on map
+                            View on map
                           </button>
                           {!aiMode && (
                             <button
@@ -191,7 +191,7 @@ export default function Sidebar({
                               className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium text-[#7b1fa2] bg-[#7b1fa2]/10"
                             >
                               <Sparkles size={16} />
-                              Plan trip with AI
+                              Plan with AI
                             </button>
                           )}
                         </div>
