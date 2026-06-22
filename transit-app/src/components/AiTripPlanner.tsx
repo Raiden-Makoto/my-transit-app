@@ -27,7 +27,7 @@ type AiTripPlannerProps = {
 };
 
 export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
-  const { nowInput, maxInput, defaultEndInput } = useMemo(() => {
+  const { nowInput, maxInput, defaultEndInput, minMs, maxMs } = useMemo(() => {
     const now = new Date();
     const maxDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 1 week ahead
     const defaultEnd = new Date(now.getTime() + 9 * 60 * 60 * 1000); // +9h, clamped
@@ -35,6 +35,8 @@ export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
       nowInput: toLocalInput(now),
       maxInput: toLocalInput(maxDate),
       defaultEndInput: toLocalInput(defaultEnd < maxDate ? defaultEnd : maxDate),
+      minMs: now.getTime(),
+      maxMs: maxDate.getTime(),
     };
   }, [list?.id]);
 
@@ -68,11 +70,24 @@ export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
     });
   };
 
+  // The min/max attributes only limit the picker UI, not typed values, so
+  // validate the actual times before planning.
+  const validateWindow = (): string | null => {
+    const startMs = new Date(start).getTime();
+    const endMs = new Date(end).getTime();
+    if (Number.isNaN(startMs) || Number.isNaN(endMs)) return 'Please enter valid start and end times.';
+    if (startMs < minMs - 60_000) return 'Start time cannot be in the past.';
+    if (endMs <= startMs) return 'End time must be after the start time.';
+    if (startMs > maxMs || endMs > maxMs) return 'Trips can only be planned up to 1 week ahead.';
+    return null;
+  };
+
   const submit = async () => {
     const chosen = list.places.filter((p) => selected.has(p.id));
     if (chosen.length === 0) return;
-    if (new Date(end) <= new Date(start)) {
-      setError('End time must be after the start time.');
+    const validationError = validateWindow();
+    if (validationError) {
+      setError(validationError);
       return;
     }
     setError(null);
@@ -86,6 +101,8 @@ export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
       setLoading(false);
     }
   };
+
+  const windowError = validateWindow();
 
   return (
     <div className="absolute inset-0 z-[1300] flex items-center justify-center p-4 font-sans">
@@ -148,7 +165,11 @@ export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
                   />
                 </label>
               </div>
-              <p className="mb-3 text-[12px] text-[#9aa0a6]">Trips can be planned up to 1 week ahead.</p>
+              {windowError ? (
+                <p className="mb-3 text-[12px] font-medium text-[#d93025]">{windowError}</p>
+              ) : (
+                <p className="mb-3 text-[12px] text-[#9aa0a6]">Trips can be planned up to 1 week ahead.</p>
+              )}
 
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[13px] font-medium text-[#202124]">
@@ -230,7 +251,7 @@ export default function AiTripPlanner({ list, onClose }: AiTripPlannerProps) {
               <button
                 type="button"
                 onClick={submit}
-                disabled={selected.size === 0 || loading}
+                disabled={selected.size === 0 || loading || windowError !== null}
                 className="flex items-center gap-2 rounded-full px-5 py-2 text-[14px] font-medium text-white bg-[#7b1fa2] hover:bg-[#6a1b9a] disabled:opacity-40"
               >
                 {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
