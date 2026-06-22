@@ -6,6 +6,7 @@ import SearchBox from './SearchBox';
 import CollectionPicker from './CollectionPicker';
 import Sidebar from './Sidebar';
 import TripPlanner from './TripPlanner';
+import AiTripPlanner from './AiTripPlanner';
 import { useSavedPlaces } from '../hooks/useSavedPlaces';
 import { useCollections } from '../hooks/useCollections';
 import { useLocationHistory } from '../hooks/useLocationHistory';
@@ -127,6 +128,7 @@ export default function MapCanvas() {
   const [pickerPlace, setPickerPlace] = useState<SavedLocation | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [viewedList, setViewedList] = useState<PlaceCollection | null>(null);
+  const [aiList, setAiList] = useState<PlaceCollection | null>(null);
   const [tripOpen, setTripOpen] = useState(false);
   const [tripLegs, setTripLegs] = useState<TripLeg[] | null>(null);
   const [tripInitialLegs, setTripInitialLegs] = useState<TripLeg[] | null>(null);
@@ -301,7 +303,10 @@ export default function MapCanvas() {
         collections={collections}
         onLocationSelect={handleLocationSelect}
         onViewList={handleViewList}
+        onPlanWithAi={setAiList}
       />
+
+      <AiTripPlanner list={aiList} onClose={() => setAiList(null)} />
 
       {pickerPlace && (
         <CollectionPicker place={pickerPlace} collections={collections} onClose={() => setPickerPlace(null)} />
