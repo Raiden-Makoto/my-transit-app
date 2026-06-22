@@ -46,9 +46,11 @@ function buildMessages({ places, start, end }) {
 
   const system = [
     'You are a local trip-planning assistant.',
-    'Given a set of places and an available time window, decide the best order to visit them and how long to spend at each.',
-    'Account for rough travel time between consecutive stops based on their coordinates.',
-    'If the places cannot all be visited within the given window, plan only what fits on the FIRST day and set "truncatedToFirstDay" to true.',
+    'Given a set of places and an available time window, decide the best order to visit them and how long to spend AT each place.',
+    'Do NOT account for travel time between places — assume moving between stops is instantaneous.',
+    'Only consider the total time SPENT at the places to decide how many fit in the window.',
+    'Schedule stops back-to-back: each stop\'s arrive time equals the previous stop\'s depart time.',
+    'If the places cannot all fit within the given window, plan only what fits on the FIRST day and set "truncatedToFirstDay" to true.',
     'Respond with STRICT JSON only — no prose, no markdown fences — matching exactly this shape:',
     '{',
     '  "stops": [',
@@ -57,6 +59,7 @@ function buildMessages({ places, start, end }) {
     '  "truncatedToFirstDay": boolean,',
     '  "summary": string',
     '}',
+    'durationMinutes is the time spent at that place; depart = arrive + durationMinutes.',
     'Times must be 24-hour HH:MM within the provided window. "note" is a short tip (<= 12 words).',
   ].join('\n');
 
