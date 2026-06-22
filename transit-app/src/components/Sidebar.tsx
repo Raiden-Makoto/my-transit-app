@@ -11,11 +11,22 @@ import {
   Sparkles,
   Square,
   CheckSquare,
+  Loader2,
+  ArrowLeft,
 } from 'lucide-react';
 import type { SavedPlacesApi } from '../hooks/useSavedPlaces';
 import type { HistoryApi } from '../hooks/useLocationHistory';
 import { COLLECTION_PLACE_LIMIT, type CollectionsApi } from '../hooks/useCollections';
 import type { PlaceCollection, SavedLocation } from '../types/location';
+import { planTrip, type Itinerary } from '../services/planTrip';
+
+// Format a Date as a value for <input type="datetime-local"> in local time.
+function toLocalInput(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
+    date.getMinutes(),
+  )}`;
+}
 
 type SidebarProps = {
   open: boolean;
@@ -41,6 +52,18 @@ export default function Sidebar({
   const [aiListId, setAiListId] = useState<string | null>(null);
   const [aiSelected, setAiSelected] = useState<Set<string>>(new Set());
 
+  const now = new Date();
+  const maxDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 1 week ahead
+  const nowInput = toLocalInput(now);
+  const maxInput = toLocalInput(maxDate);
+  const defaultEnd = new Date(now.getTime() + 9 * 60 * 60 * 1000); // +9h, clamped below
+
+  const [aiStart, setAiStart] = useState(nowInput);
+  const [aiEnd, setAiEnd] = useState(toLocalInput(defaultEnd < maxDate ? defaultEnd : maxDate));
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState<Itinerary | null>(null);
+
   const select = (place: SavedLocation) => {
     onLocationSelect(place);
     onClose();
@@ -49,11 +72,16 @@ export default function Sidebar({
   const startAiMode = (listId: string) => {
     setAiListId(listId);
     setAiSelected(new Set());
+    setAiResult(null);
+    setAiError(null);
   };
 
   const exitAiMode = () => {
     setAiListId(null);
     setAiSelected(new Set());
+    setAiResult(null);
+    setAiError(null);
+    setAiLoading(false);
   };
 
   const toggleAiSelect = (placeId: string) => {
@@ -65,11 +93,23 @@ export default function Sidebar({
     });
   };
 
-  const planWithAi = (list: PlaceCollection) => {
+  const planWithAi = async (list: PlaceCollection) => {
     const chosen = list.places.filter((p) => aiSelected.has(p.id));
-    // AI agent integration is not wired up yet; this is a placeholder.
-    console.log('[Plan trip with AI] selected places:', chosen);
-    exitAiMode();
+    if (chosen.length === 0) return;
+    if (new Date(aiEnd) <= new Date(aiStart)) {
+      setAiError('End time must be after the start time.');
+      return;
+    }
+    setAiError(null);
+    setAiLoading(true);
+    try {
+      const itinerary = await planTrip(chosen, aiStart, aiEnd);
+      setAiResult(itinerary);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'Failed to plan trip.');
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   return (
@@ -196,13 +236,41 @@ export default function Sidebar({
                           )}
                         </div>
 
-                        {aiMode && (
-                          <p className="pl-[52px] pr-4 pt-1 text-[12px] text-[#5f6368]">
-                            Select the places to include, then plan with AI.
-                          </p>
+                        {aiMode && !aiResult && (
+                          <div className="ml-[52px] mr-4 pt-1">
+                            <p className="text-[12px] text-[#5f6368]">
+                              Select the places to include, then plan with AI.
+                            </p>
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                              <label className="text-[11px] text-[#5f6368]">
+                                Start
+                                <input
+                                  type="datetime-local"
+                                  value={aiStart}
+                                  min={nowInput}
+                                  max={maxInput}
+                                  onChange={(e) => setAiStart(e.target.value)}
+                                  className="mt-0.5 w-full rounded-md border border-[#dadce0] px-2 py-1 text-[12px] text-[#202124]"
+                                />
+                              </label>
+                              <label className="text-[11px] text-[#5f6368]">
+                                End
+                                <input
+                                  type="datetime-local"
+                                  value={aiEnd}
+                                  min={aiStart}
+                                  max={maxInput}
+                                  onChange={(e) => setAiEnd(e.target.value)}
+                                  className="mt-0.5 w-full rounded-md border border-[#dadce0] px-2 py-1 text-[12px] text-[#202124]"
+                                />
+                              </label>
+                            </div>
+                            <p className="mt-1 text-[11px] text-[#9aa0a6]">Up to 1 week ahead.</p>
+                          </div>
                         )}
 
-                        {list.places.map((place) =>
+                        {(!aiMode || !aiResult) &&
+                          list.places.map((place) =>
                           aiMode ? (
                             <button
                               key={place.id}
@@ -244,25 +312,39 @@ export default function Sidebar({
                           ),
                         )}
 
-                        {aiMode && (
-                          <div className="flex items-center gap-2 ml-[52px] mr-4 my-2">
-                            <button
-                              type="button"
-                              onClick={() => planWithAi(list)}
-                              disabled={aiSelected.size === 0}
-                              className="flex items-center gap-2 px-4 py-1.5 rounded-full text-[13px] font-medium text-white bg-[#7b1fa2] hover:bg-[#6a1b9a] disabled:opacity-40"
-                            >
-                              <Sparkles size={16} />
-                              Plan with AI ({aiSelected.size})
-                            </button>
-                            <button
-                              type="button"
-                              onClick={exitAiMode}
-                              className="px-3 py-1.5 rounded-full text-[13px] font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
-                            >
-                              Cancel
-                            </button>
+                        {aiMode && !aiResult && (
+                          <div className="ml-[52px] mr-4 my-2">
+                            {aiError && (
+                              <p className="mb-2 text-[12px] text-[#d93025]">{aiError}</p>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => planWithAi(list)}
+                                disabled={aiSelected.size === 0 || aiLoading}
+                                className="flex items-center gap-2 px-4 py-1.5 rounded-full text-[13px] font-medium text-white bg-[#7b1fa2] hover:bg-[#6a1b9a] disabled:opacity-40"
+                              >
+                                {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                                {aiLoading ? 'Planning…' : `Plan with AI (${aiSelected.size})`}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={exitAiMode}
+                                disabled={aiLoading}
+                                className="px-3 py-1.5 rounded-full text-[13px] font-medium text-[#5f6368] hover:bg-[#f1f3f4] disabled:opacity-40"
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           </div>
+                        )}
+
+                        {aiMode && aiResult && (
+                          <ItineraryResult
+                            itinerary={aiResult}
+                            onBack={() => setAiResult(null)}
+                            onDone={exitAiMode}
+                          />
                         )}
                       </>
                     ))}
@@ -273,6 +355,63 @@ export default function Sidebar({
         </div>
       </aside>
     </>
+  );
+}
+
+function ItineraryResult({
+  itinerary,
+  onBack,
+  onDone,
+}: {
+  itinerary: Itinerary;
+  onBack: () => void;
+  onDone: () => void;
+}) {
+  return (
+    <div className="ml-[52px] mr-4 my-2">
+      {itinerary.summary && <p className="text-[13px] text-[#202124]">{itinerary.summary}</p>}
+      {itinerary.truncatedToFirstDay && (
+        <p className="mt-1 text-[12px] font-medium text-[#b06000]">
+          Not enough time for everything — showing the first day only.
+        </p>
+      )}
+
+      <ol className="mt-2 space-y-2">
+        {itinerary.stops.map((stop, i) => (
+          <li key={`${stop.name}_${i}`} className="flex gap-2">
+            <span className="flex items-center justify-center w-5 h-5 mt-0.5 shrink-0 rounded-full bg-[#7b1fa2] text-white text-[11px] font-bold">
+              {i + 1}
+            </span>
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-[#202124] truncate">{stop.name}</p>
+              <p className="text-[12px] text-[#5f6368]">
+                {stop.arrive}–{stop.depart}
+                {stop.durationMinutes ? ` · ${stop.durationMinutes} min` : ''}
+              </p>
+              {stop.note && <p className="text-[12px] text-[#5f6368] italic">{stop.note}</p>}
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
+        >
+          <ArrowLeft size={15} />
+          Back
+        </button>
+        <button
+          type="button"
+          onClick={onDone}
+          className="px-4 py-1.5 rounded-full text-[13px] font-medium text-white bg-[#7b1fa2] hover:bg-[#6a1b9a]"
+        >
+          Done
+        </button>
+      </div>
+    </div>
   );
 }
 
