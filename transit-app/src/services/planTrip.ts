@@ -34,6 +34,7 @@ export async function planTrip(
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    console.error(`[planTrip] API error ${res.status} ${res.statusText}`, data);
     throw new Error(data?.error || `Request failed (${res.status})`);
   }
   return data.itinerary as Itinerary;

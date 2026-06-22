@@ -105,6 +105,7 @@ app.post('/api/plan-trip', async (req, res) => {
 
     if (!hfRes.ok) {
       const detail = await hfRes.text();
+      console.error(`[plan-trip] Hugging Face error ${hfRes.status} ${hfRes.statusText}:`, detail);
       return res.status(502).json({ error: `Hugging Face request failed (${hfRes.status}).`, detail });
     }
 
@@ -113,11 +114,13 @@ app.post('/api/plan-trip', async (req, res) => {
     const itinerary = extractJson(content);
 
     if (!itinerary) {
+      console.error('[plan-trip] Could not parse itinerary from model response:', content);
       return res.status(502).json({ error: 'Could not parse an itinerary from the model response.', raw: content });
     }
 
     return res.json({ itinerary });
   } catch (err) {
+    console.error('[plan-trip] Unexpected server error:', err);
     return res.status(500).json({ error: 'Unexpected server error.', detail: String(err) });
   }
 });
