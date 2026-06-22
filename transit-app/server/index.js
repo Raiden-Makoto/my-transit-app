@@ -11,6 +11,53 @@ const HF_TOKEN = process.env.HF_TOKEN;
 const HF_MODEL = process.env.HF_MODEL || 'mistralai/Mistral-7B-Instruct-v0.3';
 const HF_URL = 'https://router.huggingface.co/v1/chat/completions';
 
+// Transient HF statuses worth retrying (model loading, rate limit, gateway).
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+const MAX_ATTEMPTS = 4;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Exponential backoff with jitter: ~0.5s, 1s, 2s, ... capped at 8s.
+const backoffMs = (attempt) => Math.min(8000, 500 * 2 ** attempt) + Math.floor(Math.random() * 250);
+
+/**
+ * Fetch the HF chat-completions endpoint, retrying transient failures with
+ * exponential backoff. Returns the Response (the body is left unconsumed so
+ * the caller can stream it). Honors a Retry-After header when present.
+ */
+async function fetchHfWithRetry(payload) {
+  let lastError;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(HF_URL, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${HF_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) return res;
+      if (!RETRYABLE_STATUS.has(res.status) || attempt === MAX_ATTEMPTS - 1) return res;
+
+      // Retryable: log + wait, consuming the body so the connection is freed.
+      const detail = await res.text().catch(() => '');
+      const retryAfter = Number(res.headers.get('retry-after'));
+      const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : backoffMs(attempt);
+      console.warn(
+        `[plan-trip] HF ${res.status} ${res.statusText} (attempt ${attempt + 1}/${MAX_ATTEMPTS}), retrying in ${waitMs}ms`,
+        detail.slice(0, 200),
+      );
+      await sleep(waitMs);
+    } catch (err) {
+      lastError = err;
+      if (attempt === MAX_ATTEMPTS - 1) throw err;
+      const waitMs = backoffMs(attempt);
+      console.warn(`[plan-trip] HF request failed (attempt ${attempt + 1}/${MAX_ATTEMPTS}), retrying in ${waitMs}ms`, err);
+      await sleep(waitMs);
+    }
+  }
+  if (lastError) throw lastError;
+}
+
 function buildMessages({ places, start, end }) {
   const placeLines = places
     .map((p, i) => `${i + 1}. [id: ${p.id}] ${p.name}${p.address ? ` (${p.address})` : ''} [lat ${p.lat}, lon ${p.lon}]`)
@@ -62,22 +109,15 @@ app.post('/api/plan-trip', async (req, res) => {
 
   let hfRes;
   try {
-    hfRes = await fetch(HF_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${HF_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: HF_MODEL,
-        messages: buildMessages({ places, start, end }),
-        temperature: 0.3,
-        max_tokens: 1024,
-        stream: true,
-      }),
+    hfRes = await fetchHfWithRetry({
+      model: HF_MODEL,
+      messages: buildMessages({ places, start, end }),
+      temperature: 0.3,
+      max_tokens: 1024,
+      stream: true,
     });
   } catch (err) {
-    console.error('[plan-trip] Failed to reach Hugging Face:', err);
+    console.error('[plan-trip] Failed to reach Hugging Face after retries:', err);
     return res.status(502).json({ error: 'Could not reach Hugging Face.', detail: String(err) });
   }
 
