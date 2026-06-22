@@ -9,7 +9,7 @@ export interface ItineraryStop {
 
 export interface ItineraryData {
   stops: ItineraryStop[];
-  truncatedToFirstDay: boolean;
+  omittedPlaces: string[];
 }
 
 /**
@@ -94,7 +94,7 @@ export function parseItineraryData(text: string): ItineraryData | null {
     if (!Array.isArray(data?.stops)) return null;
     return {
       stops: data.stops,
-      truncatedToFirstDay: Boolean(data.truncatedToFirstDay),
+      omittedPlaces: Array.isArray(data.omittedPlaces) ? data.omittedPlaces : [],
     };
   } catch {
     return null;

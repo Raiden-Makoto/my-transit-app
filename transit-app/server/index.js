@@ -16,7 +16,7 @@ app.use(express.json({ limit: '256kb' }));
 
 const PORT = process.env.PORT || 8787;
 const HF_TOKEN = process.env.HF_TOKEN;
-const HF_MODEL = process.env.HF_MODEL || 'meta-llama/Llama-3.1-8B-Instruct';
+const HF_MODEL = process.env.HF_MODEL || 'meta-llama/Llama-3.3-70B-Instruct';
 const HF_URL = 'https://router.huggingface.co/v1/chat/completions';
 
 // Transient HF statuses worth retrying (model loading, rate limit, gateway).
@@ -73,19 +73,25 @@ function buildMessages({ places, start, end }) {
 
   const instructions = [
     'You are a friendly local trip-planning assistant.',
-    'Given a set of places and an available time window, decide the best order to visit them and a recommended time to spend AT each place (e.g. CN Tower: 1 hour, Ripley\'s Aquarium: 2 hours).',
+    'You are given a set of places and ONE continuous time window (a single outing — never multiple days).',
+    'Choose the best order to visit the places and a recommended time to spend AT each place (e.g. CN Tower: 1 hour, Ripley\'s Aquarium: 2 hours).',
     'Use approximate travel time between consecutive places (based on their coordinates) ONLY to judge how many places realistically fit in the window. Do NOT report travel times or clock times.',
-    'A place fits if the total of (time spent at places already scheduled) + (approximate travel between them) + (time spent here) stays within the window.',
-    'If not everything fits, include only the places that fit on the FIRST day and mention this to the user.',
+    'A place fits if (total dwell time of places already scheduled) + (approximate travel between them) + (its own dwell time) stays within the window.',
+    '',
+    'FITTING RULES — follow exactly:',
+    '- If every place fits, include them ALL. Do not drop anything and do not add any "we had to drop" note.',
+    '- If some places do NOT fit, OMIT them entirely: they must NOT appear in the numbered list AND must NOT appear in the JSON stops.',
+    '- Only after omitting them, add ONE short closing sentence naming the place(s) you left out (because they did not fit the window).',
+    '- NEVER list a place and also say it was skipped. Never mention "days" or a "second day".',
     '',
     'FORMAT YOUR RESPONSE IN TWO PARTS:',
-    '1. A short, friendly Markdown itinerary: a brief intro sentence, then a numbered list where each item is "**Place name** — recommended duration" followed by a one-line tip. If you had to drop places, add a short note about it.',
+    '1. A short, friendly Markdown itinerary: a brief intro sentence, then a numbered list where each item is "**Place name** — recommended duration" followed by a one-line tip. Add the omitted-places note only if rule above applies.',
     '2. AFTER the Markdown, output a fenced ```json code block (this will be hidden from the user) with this exact shape:',
     '```json',
-    '{ "stops": [ { "id": string, "name": string, "durationMinutes": number, "note": string } ], "truncatedToFirstDay": boolean }',
+    '{ "stops": [ { "id": string, "name": string, "durationMinutes": number, "note": string } ], "omittedPlaces": [string] }',
     '```',
-    'In the JSON, "id" MUST be the exact id given for that place, "stops" are in visit order, and durationMinutes is the recommended minutes spent there.',
-    'Only include places from the provided list. Always include the JSON block last.',
+    'In the JSON: "id" MUST be the exact id given for that place; "stops" are the included places in visit order; durationMinutes is the recommended minutes spent there; "omittedPlaces" lists the names you left out (empty array if none).',
+    'The JSON stops and the numbered list must contain exactly the same places. Only use places from the provided list. Always put the JSON block last.',
   ].join('\n');
 
   const request = [
