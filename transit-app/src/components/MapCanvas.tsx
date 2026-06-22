@@ -129,6 +129,7 @@ export default function MapCanvas() {
   const [viewedList, setViewedList] = useState<PlaceCollection | null>(null);
   const [tripOpen, setTripOpen] = useState(false);
   const [tripLegs, setTripLegs] = useState<TripLeg[] | null>(null);
+  const [tripInitialLegs, setTripInitialLegs] = useState<TripLeg[] | null>(null);
   const savedPlaces = useSavedPlaces();
   const collections = useCollections();
   const history = useLocationHistory();
@@ -176,6 +177,16 @@ export default function MapCanvas() {
     setDestination(null);
     setViewedList(null);
     setTripLegs(legs);
+  };
+
+  const handleGetDirections = (place: SavedLocation) => {
+    const origin: SavedLocation | null = position
+      ? { id: 'current-location', primaryText: 'Your location', secondaryText: '', lat: position[0], lon: position[1] }
+      : null;
+    setTripInitialLegs([
+      { id: `leg_${Date.now().toString(36)}`, from: origin, to: place },
+    ]);
+    setTripOpen(true);
   };
 
   const viewport = useMemo<SearchViewport | undefined>(
@@ -227,7 +238,10 @@ export default function MapCanvas() {
 
       <button
         type="button"
-        onClick={() => setTripOpen(true)}
+        onClick={() => {
+          setTripInitialLegs(null);
+          setTripOpen(true);
+        }}
         className="absolute bottom-6 left-3 z-[1000] flex items-center gap-2 h-11 px-4 bg-[#1a73e8] rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.3)] text-[14px] font-medium text-white hover:bg-[#1765cc] transition-colors font-sans"
         aria-label="Plan a trip"
       >
@@ -237,9 +251,13 @@ export default function MapCanvas() {
 
       <TripPlanner
         open={tripOpen}
-        onClose={() => setTripOpen(false)}
+        onClose={() => {
+          setTripOpen(false);
+          setTripInitialLegs(null);
+        }}
         viewport={viewport}
         onShowRoute={handleShowRoute}
+        initialLegs={tripInitialLegs}
       />
 
       {viewedList && (
@@ -354,6 +372,25 @@ export default function MapCanvas() {
                   <FolderPlus size={14} />
                   Add to list
                 </button>
+                <button
+                  type="button"
+                  onClick={() => handleGetDirections(destination)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 10px',
+                    border: 'none',
+                    borderRadius: 9999,
+                    background: '#1a73e8',
+                    color: '#fff',
+                    font: '500 13px system-ui, sans-serif',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Route size={14} />
+                  Directions
+                </button>
               </span>
             </Popup>
           </Marker>
@@ -368,6 +405,27 @@ export default function MapCanvas() {
                   {place.secondaryText}
                 </>
               )}
+              <br />
+              <button
+                type="button"
+                onClick={() => handleGetDirections(place)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginTop: 8,
+                  padding: '4px 10px',
+                  border: 'none',
+                  borderRadius: 9999,
+                  background: '#1a73e8',
+                  color: '#fff',
+                  font: '500 13px system-ui, sans-serif',
+                  cursor: 'pointer',
+                }}
+              >
+                <Route size={14} />
+                Directions
+              </button>
             </Popup>
           </Marker>
         ))}

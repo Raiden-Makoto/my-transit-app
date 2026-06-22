@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Plus, Circle, MapPin, Trash2, Route } from 'lucide-react';
 import LocationInput from './LocationInput';
 import type { SearchViewport } from '../hooks/usePlaceSearch';
-import type { TripLeg } from '../types/location';
+import type { SavedLocation, TripLeg } from '../types/location';
 
 export const MAX_LEGS = 5;
 
@@ -11,14 +11,28 @@ type TripPlannerProps = {
   onClose: () => void;
   viewport?: SearchViewport;
   onShowRoute: (legs: TripLeg[]) => void;
+  /** Optional legs to seed the planner with each time it opens. */
+  initialLegs?: TripLeg[] | null;
 };
 
-function makeLeg(): TripLeg {
-  return { id: `leg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`, from: null, to: null };
+function makeLeg(from: SavedLocation | null = null, to: SavedLocation | null = null): TripLeg {
+  return {
+    id: `leg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    from,
+    to,
+  };
 }
 
-export default function TripPlanner({ open, onClose, viewport, onShowRoute }: TripPlannerProps) {
+export default function TripPlanner({ open, onClose, viewport, onShowRoute, initialLegs }: TripPlannerProps) {
   const [legs, setLegs] = useState<TripLeg[]>([makeLeg()]);
+
+  // Seed legs whenever the planner is (re)opened.
+  useEffect(() => {
+    if (open) {
+      setLegs(initialLegs && initialLegs.length > 0 ? initialLegs.slice(0, MAX_LEGS) : [makeLeg()]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const updateLeg = (id: string, patch: Partial<TripLeg>) => {
     setLegs((prev) => prev.map((leg) => (leg.id === id ? { ...leg, ...patch } : leg)));
