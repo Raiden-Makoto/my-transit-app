@@ -3,8 +3,42 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, ZoomControl, useMap, 
 import { Star, FolderPlus, Route } from 'lucide-react';
 import L from 'leaflet';
 import type { PlaceCollection, SavedLocation, TripLeg } from '../types/location';
+import rapidTransit from '../data/rapidTransit.json';
 
 export type Bbox = [number, number, number, number];
+
+type CorridorMode = 'skytrain' | 'seabus' | 'rapidbus' | 'bline';
+
+interface CorridorFeature {
+  properties: { name: string; mode: string; color: string };
+  geometry: { coordinates: number[][] };
+}
+
+// Per-mode line styling for the always-on rapid-transit overlay. SkyTrain reads
+// as a bold solid line; SeaBus is dashed (it's a ferry); bus corridors are
+// slightly thinner so they sit visually beneath the rail spine.
+const CORRIDOR_STYLE: Record<CorridorMode, L.PathOptions> = {
+  skytrain: { weight: 5, opacity: 0.9 },
+  seabus: { weight: 4, opacity: 0.9, dashArray: '2 9' },
+  rapidbus: { weight: 4, opacity: 0.8 },
+  bline: { weight: 4, opacity: 0.8 },
+};
+
+function TransitCorridors() {
+  return (
+    <>
+      {(rapidTransit.features as CorridorFeature[]).map((f, i) => (
+        <Polyline
+          key={`corridor_${i}`}
+          // GeoJSON stores [lon, lat]; Leaflet wants [lat, lon].
+          positions={f.geometry.coordinates.map(([lon, lat]) => [lat, lon] as [number, number])}
+          pathOptions={{ color: f.properties.color, ...CORRIDOR_STYLE[f.properties.mode as CorridorMode] }}
+          interactive={false}
+        />
+      ))}
+    </>
+  );
+}
 
 // Build a teardrop map-pin marker in an arbitrary color so list pins can
 // match their list's color.
@@ -131,6 +165,7 @@ interface MapViewProps {
   tripLegs: TripLeg[] | null;
   tripStops: SavedLocation[];
   aiStops: SavedLocation[] | null;
+  showCorridors: boolean;
   onBboxChange: (bbox: Bbox) => void;
   isSaved: (id: string) => boolean;
   onToggleSaved: (place: SavedLocation) => void;
@@ -146,6 +181,7 @@ export default function MapView({
   tripLegs,
   tripStops,
   aiStops,
+  showCorridors,
   onBboxChange,
   isSaved,
   onToggleSaved,
@@ -166,6 +202,7 @@ export default function MapView({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+      {showCorridors && <TransitCorridors />}
       <Marker position={position} icon={blueDotIcon}>
         <Popup>You are here</Popup>
       </Marker>

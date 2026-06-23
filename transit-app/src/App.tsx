@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { Menu, X, Route, Sparkles } from 'lucide-react';
+import { Menu, X, Route, Sparkles, TrainFront } from 'lucide-react';
 import SearchBox from './components/SearchBox';
 import CollectionPicker from './components/CollectionPicker';
 import Sidebar from './components/Sidebar';
@@ -28,6 +28,7 @@ function App() {
   const [tripLegs, setTripLegs] = useState<TripLeg[] | null>(null);
   const [tripInitialLegs, setTripInitialLegs] = useState<TripLeg[] | null>(null);
   const [aiStops, setAiStops] = useState<SavedLocation[] | null>(null);
+  const [showCorridors, setShowCorridors] = useState(true);
   const savedPlaces = useSavedPlaces();
   const collections = useCollections();
   const history = useLocationHistory();
@@ -158,6 +159,49 @@ function App() {
         Plan trip
       </button>
 
+      <button
+        type="button"
+        onClick={() => setShowCorridors((v) => !v)}
+        aria-pressed={showCorridors}
+        className={`absolute bottom-[76px] left-3 z-[1000] flex items-center gap-2 h-11 px-4 rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.3)] text-[14px] font-medium transition-colors font-sans ${
+          showCorridors ? 'bg-[#1a73e8] text-white hover:bg-[#1765cc]' : 'bg-white text-[#202124] hover:bg-[#f1f3f4]'
+        }`}
+        aria-label="Toggle rapid transit corridors"
+      >
+        <TrainFront size={18} />
+        Transit lines
+      </button>
+
+      {showCorridors && (
+        <div className="absolute bottom-[136px] left-3 z-[1000] bg-white rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] px-3 py-2.5 font-sans">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-[#5f6368] mb-1.5">
+            Rapid transit
+          </div>
+          <ul className="space-y-1.5">
+            {[
+              { name: 'Expo Line', color: '#0033a0' },
+              { name: 'Millennium Line', color: '#ffcd00' },
+              { name: 'Canada Line', color: '#007c9f' },
+              { name: 'SeaBus', color: '#746661', dashed: true },
+              { name: 'RapidBus', color: '#008522' },
+              { name: '99 B-Line', color: '#d04110' },
+            ].map((row) => (
+              <li key={row.name} className="flex items-center gap-2 text-[12px] text-[#202124]">
+                <span
+                  className="inline-block w-5 h-[3px] rounded-full"
+                  style={
+                    row.dashed
+                      ? { backgroundImage: `repeating-linear-gradient(to right, ${row.color} 0 3px, transparent 3px 6px)` }
+                      : { backgroundColor: row.color }
+                  }
+                />
+                {row.name}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <TripPlanner
         open={tripOpen}
         onClose={() => {
@@ -246,6 +290,7 @@ function App() {
         tripLegs={tripLegs}
         tripStops={tripStops}
         aiStops={aiStops}
+        showCorridors={showCorridors}
         onBboxChange={setBbox}
         isSaved={savedPlaces.isSaved}
         onToggleSaved={savedPlaces.toggleSaved}
