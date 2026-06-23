@@ -175,7 +175,7 @@ function App() {
       </div>
 
       {showCorridors && (
-        <div className="absolute bottom-[92px] right-3 z-[1000] bg-white rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] px-3 py-2.5 font-sans">
+        <div className="absolute bottom-4 right-3 z-[1000] bg-white rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] px-3 py-2.5 font-sans">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-[#5f6368] mb-1.5">
             Rapid transit
           </div>

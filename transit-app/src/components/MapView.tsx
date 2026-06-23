@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, ZoomControl, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import { Star, FolderPlus, Route } from 'lucide-react';
 import L from 'leaflet';
 import type { PlaceCollection, SavedLocation, TripLeg } from '../types/location';
@@ -137,6 +137,20 @@ const redPinIcon = new L.Icon({
   shadowSize: [41, 41],
 });
 
+// Clamp how far the user can zoom out. Set imperatively because react-leaflet
+// only reads MapContainer's minZoom prop on first init (e.g. it's ignored on
+// hot-reload / prop changes).
+const MIN_ZOOM = 10;
+
+function MapConstraints() {
+  const map = useMap();
+  useEffect(() => {
+    map.setMinZoom(MIN_ZOOM);
+    if (map.getZoom() < MIN_ZOOM) map.setZoom(MIN_ZOOM);
+  }, [map]);
+  return null;
+}
+
 function RecenterMap({ coords }: { coords: [number, number] }) {
   const map = useMap();
   useEffect(() => {
@@ -198,7 +212,7 @@ export default function MapView({
       zoomControl={false}
       style={{ height: '100%', width: '100%' }}
     >
-      <ZoomControl position="bottomright" />
+      <MapConstraints />
       <BoundsWatcher onChange={onBboxChange} />
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
