@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import { Star, FolderPlus, Route } from 'lucide-react';
 import L from 'leaflet';
@@ -25,18 +25,36 @@ const CORRIDOR_STYLE: Record<CorridorMode, L.PathOptions> = {
   bline: { weight: 4, opacity: 0.8 },
 };
 
+// Thin the lines out when zoomed out (otherwise they look very fat at the
+// metro-wide view) and let them grow toward full weight as you zoom in.
+function zoomWeightFactor(zoom: number) {
+  return Math.max(0.4, Math.min(1.2, 0.4 + (zoom - 10) * 0.13));
+}
+
 function TransitCorridors() {
+  const map = useMap();
+  const [zoom, setZoom] = useState(() => map.getZoom());
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
+  const factor = zoomWeightFactor(zoom);
+
   return (
     <>
-      {(rapidTransit.features as CorridorFeature[]).map((f, i) => (
-        <Polyline
-          key={`corridor_${i}`}
-          // GeoJSON stores [lon, lat]; Leaflet wants [lat, lon].
-          positions={f.geometry.coordinates.map(([lon, lat]) => [lat, lon] as [number, number])}
-          pathOptions={{ color: f.properties.color, ...CORRIDOR_STYLE[f.properties.mode as CorridorMode] }}
-          interactive={false}
-        />
-      ))}
+      {(rapidTransit.features as CorridorFeature[]).map((f, i) => {
+        const base = CORRIDOR_STYLE[f.properties.mode as CorridorMode];
+        return (
+          <Polyline
+            key={`corridor_${i}`}
+            // GeoJSON stores [lon, lat]; Leaflet wants [lat, lon].
+            positions={f.geometry.coordinates.map(([lon, lat]) => [lat, lon] as [number, number])}
+            pathOptions={{
+              ...base,
+              color: f.properties.color,
+              weight: Math.round((base.weight ?? 4) * factor * 10) / 10,
+            }}
+            interactive={false}
+          />
+        );
+      })}
     </>
   );
 }
