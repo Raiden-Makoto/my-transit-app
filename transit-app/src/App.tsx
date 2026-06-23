@@ -146,34 +146,36 @@ function App() {
         <Menu size={22} />
       </button>
 
-      <button
-        type="button"
-        onClick={() => {
-          setTripInitialLegs(null);
-          setTripOpen(true);
-        }}
-        className="absolute bottom-6 left-3 z-[1000] flex items-center gap-2 h-11 px-4 bg-[#1a73e8] rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.3)] text-[14px] font-medium text-white hover:bg-[#1765cc] transition-colors font-sans"
-        aria-label="Plan a trip"
-      >
-        <Route size={18} />
-        Plan trip
-      </button>
+      <div className="absolute bottom-6 left-3 z-[1000] flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setTripInitialLegs(null);
+            setTripOpen(true);
+          }}
+          className="flex items-center gap-2 h-11 px-4 bg-[#1a73e8] rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.3)] text-[14px] font-medium text-white hover:bg-[#1765cc] transition-colors font-sans"
+          aria-label="Plan a trip"
+        >
+          <Route size={18} />
+          Plan trip
+        </button>
 
-      <button
-        type="button"
-        onClick={() => setShowCorridors((v) => !v)}
-        aria-pressed={showCorridors}
-        className={`absolute bottom-[76px] left-3 z-[1000] flex items-center gap-2 h-11 px-4 rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.3)] text-[14px] font-medium transition-colors font-sans ${
-          showCorridors ? 'bg-[#1a73e8] text-white hover:bg-[#1765cc]' : 'bg-white text-[#202124] hover:bg-[#f1f3f4]'
-        }`}
-        aria-label="Toggle rapid transit corridors"
-      >
-        <TrainFront size={18} />
-        Transit lines
-      </button>
+        <button
+          type="button"
+          onClick={() => setShowCorridors((v) => !v)}
+          aria-pressed={showCorridors}
+          className={`flex items-center gap-2 h-11 px-4 rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.3)] text-[14px] font-medium transition-colors font-sans ${
+            showCorridors ? 'bg-[#1a73e8] text-white hover:bg-[#1765cc]' : 'bg-white text-[#202124] hover:bg-[#f1f3f4]'
+          }`}
+          aria-label="Toggle rapid transit corridors"
+        >
+          <TrainFront size={18} />
+          Transit lines
+        </button>
+      </div>
 
       {showCorridors && (
-        <div className="absolute bottom-[136px] left-3 z-[1000] bg-white rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] px-3 py-2.5 font-sans">
+        <div className="absolute bottom-[92px] right-3 z-[1000] bg-white rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] px-3 py-2.5 font-sans">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-[#5f6368] mb-1.5">
             Rapid transit
           </div>
