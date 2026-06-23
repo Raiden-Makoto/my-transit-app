@@ -182,6 +182,7 @@ function App() {
               { name: 'Expo Line', color: '#0033a0' },
               { name: 'Millennium Line', color: '#ffcd00' },
               { name: 'Canada Line', color: '#007c9f' },
+              { name: 'West Coast Express', color: '#87189d', dashed: true },
               { name: 'SeaBus', color: '#746661', dashed: true },
               { name: 'RapidBus', color: '#008522' },
               { name: '99 B-Line', color: '#d04110' },

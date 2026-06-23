@@ -7,7 +7,7 @@ import rapidTransit from '../data/rapidTransit.json';
 
 export type Bbox = [number, number, number, number];
 
-type CorridorMode = 'skytrain' | 'seabus' | 'rapidbus' | 'bline';
+type CorridorMode = 'skytrain' | 'wce' | 'seabus' | 'rapidbus' | 'bline';
 
 interface CorridorFeature {
   properties: { name: string; mode: string; color: string };
@@ -19,6 +19,7 @@ interface CorridorFeature {
 // slightly thinner so they sit visually beneath the rail spine.
 const CORRIDOR_STYLE: Record<CorridorMode, L.PathOptions> = {
   skytrain: { weight: 5, opacity: 0.9 },
+  wce: { weight: 4, opacity: 0.9, dashArray: '10 6' },
   seabus: { weight: 4, opacity: 0.9, dashArray: '2 9' },
   rapidbus: { weight: 4, opacity: 0.8 },
   bline: { weight: 4, opacity: 0.8 },
