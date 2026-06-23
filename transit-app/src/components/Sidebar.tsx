@@ -9,10 +9,13 @@ import {
   ChevronRight,
   Map as MapIcon,
   Sparkles,
+  Pencil,
+  Trash2,
+  Check,
 } from 'lucide-react';
 import type { SavedPlacesApi } from '../hooks/useSavedPlaces';
 import type { HistoryApi } from '../hooks/useLocationHistory';
-import { COLLECTION_PLACE_LIMIT, type CollectionsApi } from '../hooks/useCollections';
+import { COLLECTION_PLACE_LIMIT, COLLECTION_COLORS, type CollectionsApi } from '../hooks/useCollections';
 import type { PlaceCollection, SavedLocation } from '../types/location';
 
 type SidebarProps = {
@@ -37,10 +40,29 @@ export default function Sidebar({
   onPlanWithAi,
 }: SidebarProps) {
   const [expandedList, setExpandedList] = useState<string | null>(null);
+  // Per-list inline UI mode: renaming/recoloring vs. confirming deletion.
+  const [listMode, setListMode] = useState<{ id: string; mode: 'edit' | 'delete' } | null>(null);
+  const [draftName, setDraftName] = useState('');
 
   const select = (place: SavedLocation) => {
     onLocationSelect(place);
     onClose();
+  };
+
+  const startEdit = (list: PlaceCollection) => {
+    setDraftName(list.name);
+    setListMode({ id: list.id, mode: 'edit' });
+  };
+
+  const saveEdit = (id: string) => {
+    collections.renameCollection(id, draftName);
+    setListMode(null);
+  };
+
+  const confirmDelete = (id: string) => {
+    collections.deleteCollection(id);
+    if (expandedList === id) setExpandedList(null);
+    setListMode(null);
   };
 
   return (
@@ -133,36 +155,124 @@ export default function Sidebar({
                       {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                     </span>
                   </button>
-                  {expanded &&
-                    (list.places.length === 0 ? (
-                      <p className="pl-[60px] pr-4 py-1.5 text-[13px] text-[#5f6368]">No places yet</p>
-                    ) : (
+                  {expanded && (
                       <>
-                        <div className="flex flex-wrap gap-2 ml-[52px] mr-4 my-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onViewList(list);
-                              onClose();
-                            }}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium"
-                            style={{ color: list.color || '#1a73e8', backgroundColor: `${list.color || '#1a73e8'}1a` }}
-                          >
-                            <MapIcon size={16} />
-                            View on map
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onPlanWithAi(list);
-                              onClose();
-                            }}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium text-[#7b1fa2] bg-[#7b1fa2]/10"
-                          >
-                            <Sparkles size={16} />
-                            Plan with AI
-                          </button>
-                        </div>
+                        {listMode?.id === list.id && listMode.mode === 'edit' ? (
+                          <div className="ml-[52px] mr-4 my-1.5 flex flex-col gap-2">
+                            <input
+                              autoFocus
+                              value={draftName}
+                              onChange={(e) => setDraftName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveEdit(list.id);
+                                if (e.key === 'Escape') setListMode(null);
+                              }}
+                              placeholder="List name"
+                              className="w-full rounded-lg border border-[#dadce0] px-3 py-1.5 text-[14px] outline-none focus:border-[#1a73e8]"
+                            />
+                            <div className="flex flex-wrap gap-1.5">
+                              {COLLECTION_COLORS.map((color) => (
+                                <button
+                                  key={color}
+                                  type="button"
+                                  onClick={() => collections.setCollectionColor(list.id, color)}
+                                  className={`w-6 h-6 rounded-full transition-transform hover:scale-110 ${
+                                    list.color === color ? 'ring-2 ring-offset-1 ring-[#202124]' : ''
+                                  }`}
+                                  style={{ backgroundColor: color }}
+                                  aria-label={`Set color ${color}`}
+                                />
+                              ))}
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => saveEdit(list.id)}
+                                disabled={!draftName.trim()}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium text-white bg-[#1a73e8] disabled:opacity-40"
+                              >
+                                <Check size={16} />
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setListMode(null)}
+                                className="px-3 py-1.5 rounded-full text-[13px] font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : listMode?.id === list.id && listMode.mode === 'delete' ? (
+                          <div className="ml-[52px] mr-4 my-1.5 flex flex-col gap-2">
+                            <p className="text-[13px] text-[#202124]">
+                              Delete <span className="font-medium">{list.name}</span>? This can't be undone.
+                            </p>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => confirmDelete(list.id)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium text-white bg-[#ea4335]"
+                              >
+                                <Trash2 size={16} />
+                                Delete
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setListMode(null)}
+                                className="px-3 py-1.5 rounded-full text-[13px] font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-2 ml-[52px] mr-4 my-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onViewList(list);
+                                onClose();
+                              }}
+                              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium"
+                              style={{ color: list.color || '#1a73e8', backgroundColor: `${list.color || '#1a73e8'}1a` }}
+                            >
+                              <MapIcon size={16} />
+                              View on map
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onPlanWithAi(list);
+                                onClose();
+                              }}
+                              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium text-[#7b1fa2] bg-[#7b1fa2]/10"
+                            >
+                              <Sparkles size={16} />
+                              Plan with AI
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => startEdit(list)}
+                              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium text-[#5f6368] bg-[#f1f3f4] hover:bg-[#e8eaed]"
+                            >
+                              <Pencil size={15} />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setListMode({ id: list.id, mode: 'delete' })}
+                              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium text-[#c5221f] bg-[#fce8e6] hover:bg-[#fad2cf]"
+                            >
+                              <Trash2 size={15} />
+                              Delete
+                            </button>
+                          </div>
+                        )}
+
+                        {list.places.length === 0 && listMode?.id !== list.id && (
+                          <p className="pl-[60px] pr-4 py-1.5 text-[13px] text-[#5f6368]">No places yet</p>
+                        )}
 
                         {list.places.map((place) => (
                           <div
@@ -195,7 +305,7 @@ export default function Sidebar({
                           </div>
                         ))}
                       </>
-                    ))}
+                    )}
                 </div>
               );
             })
