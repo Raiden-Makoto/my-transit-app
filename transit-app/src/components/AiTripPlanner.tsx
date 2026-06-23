@@ -6,6 +6,7 @@ import {
   displayMarkdown,
   parseItineraryData,
   resolveStops,
+  omittedNote,
 } from '../services/planTrip';
 import type { PlaceCollection, SavedLocation } from '../types/location';
 
@@ -54,6 +55,7 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap }: AiTripPlan
   const [streaming, setStreaming] = useState(false);
   const [text, setText] = useState('');
   const [pins, setPins] = useState<SavedLocation[]>([]);
+  const [omitted, setOmitted] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Reset everything whenever a new list opens the planner.
@@ -107,10 +109,14 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap }: AiTripPlan
     setStreaming(true);
     setText('');
     setPins([]);
+    setOmitted([]);
     try {
       const full = await streamPlanTrip(chosen, start, end, setText);
       const data = parseItineraryData(full);
-      if (data) setPins(resolveStops(data, chosen));
+      if (data) {
+        setPins(resolveStops(data, chosen));
+        setOmitted(data.omittedPlaces);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to plan trip.');
     } finally {
@@ -123,6 +129,7 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap }: AiTripPlan
     setStreaming(false);
     setText('');
     setPins([]);
+    setOmitted([]);
     setError(null);
   };
 
@@ -173,6 +180,11 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap }: AiTripPlan
               {markdown && <ReactMarkdown components={markdownComponents}>{markdown}</ReactMarkdown>}
               {streaming && markdown && (
                 <span className="inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-[#7b1fa2]" />
+              )}
+              {!streaming && omittedNote(omitted) && (
+                <p className="mt-3 rounded-lg bg-[#fef7e0] px-3 py-2 text-[13px] leading-relaxed text-[#7a5900]">
+                  {omittedNote(omitted)}
+                </p>
               )}
               {error && <p className="mt-3 text-[13px] text-[#d93025]">{error}</p>}
             </div>

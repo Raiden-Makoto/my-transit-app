@@ -79,10 +79,29 @@ export async function streamPlanTrip(
   return full;
 }
 
-/** The Markdown portion to display, with any (partial) hidden JSON block removed. */
+/**
+ * The Markdown portion to display, with the hidden JSON block removed and any
+ * trailing apology paragraph stripped. The model is told NOT to write a closing
+ * note — omitted places are surfaced from the JSON instead (see `omittedNote`).
+ * We still strip a trailing "Unfortunately ..." paragraph defensively, which
+ * also prevents it from flashing on screen mid-stream before the JSON arrives.
+ */
 export function displayMarkdown(text: string): string {
   const idx = text.search(/```json/i);
-  return (idx >= 0 ? text.slice(0, idx) : text).trim();
+  let md = (idx >= 0 ? text.slice(0, idx) : text).trim();
+  // Strip any trailing apology/commentary paragraph the model tacks on.
+  md = md.replace(/\n+\s*unfortunately\b[\s\S]*$/i, '').trim();
+  return md;
+}
+
+/** A friendly, data-driven note about omitted places, or null if none. */
+export function omittedNote(omittedPlaces: string[]): string | null {
+  if (omittedPlaces.length === 0) return null;
+  const names =
+    omittedPlaces.length === 1
+      ? omittedPlaces[0]
+      : `${omittedPlaces.slice(0, -1).join(', ')} and ${omittedPlaces[omittedPlaces.length - 1]}`;
+  return `Unfortunately, we couldn't fit ${names} into your timeframe — consider visiting another day!`;
 }
 
 /** Parse the trailing hidden ```json block once it's complete. */

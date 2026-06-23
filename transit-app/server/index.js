@@ -66,27 +66,98 @@ async function fetchHfWithRetry(payload) {
   if (lastError) throw lastError;
 }
 
-function buildMessages({ places, start, end }) {
+// Driving time underestimates transit by a factor that GROWS with distance:
+// in Vancouver, short trips (<10 km) take ~2.0-2.2x longer by transit, while
+// longer trips climb toward ~3.2x. We interpolate between those anchors.
+function transitScaleForKm(km) {
+  if (km <= 10) return 2.1; // midpoint of the 2.0-2.2x short-trip range
+  if (km >= 30) return 3.2; // long-trip ceiling
+  return 2.1 + ((km - 10) / (30 - 10)) * (3.2 - 2.1); // linear ramp 10->30 km
+}
+
+// Transit-adjusted travel times (minutes) between every pair of places. We pull
+// driving times AND distances from the public OSRM routing service, then scale
+// each pair by a distance-dependent transit factor. Returns a matrix[i][j] in
+// minutes, or null if the service is unreachable (we then fall back to a heuristic).
+async function getTravelMatrixMinutes(places) {
+  try {
+    const coords = places.map((p) => `${p.lon},${p.lat}`).join(';');
+    const url = `https://router.project-osrm.org/table/v1/driving/${coords}?annotations=duration,distance`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(7000) });
+    if (!res.ok) {
+      console.warn(`[plan-trip] OSRM matrix HTTP ${res.status}; using heuristic.`);
+      return null;
+    }
+    const data = await res.json();
+    if (!Array.isArray(data?.durations)) return null;
+    const distances = Array.isArray(data?.distances) ? data.distances : null;
+    return data.durations.map((row, i) =>
+      row.map((sec, j) => {
+        if (sec == null) return null;
+        const km = distances?.[i]?.[j] != null ? distances[i][j] / 1000 : 0;
+        return Math.round((sec / 60) * transitScaleForKm(km));
+      }),
+    );
+  } catch (err) {
+    console.warn('[plan-trip] OSRM matrix failed, using heuristic:', String(err));
+    return null;
+  }
+}
+
+function buildMessages({ places, start, end, travelMatrix }) {
   const placeLines = places
     .map((p, i) => `${i + 1}. [id: ${p.id}] ${p.name}${p.address ? ` (${p.address})` : ''} [lat ${p.lat}, lon ${p.lon}]`)
     .join('\n');
+
+  let travelSection;
+  if (travelMatrix) {
+    const matrixLines = places
+      .map((from, i) => {
+        const hops = places
+          .map((to, j) => (i === j || travelMatrix[i]?.[j] == null ? null : `to ${to.id}: ${travelMatrix[i][j]} min`))
+          .filter(Boolean)
+          .join(', ');
+        return `From ${from.id} — ${hops}`;
+      })
+      .join('\n');
+    travelSection = [
+      'REAL transit travel times between places (minutes) — use THESE exact numbers, not straight-line distance:',
+      matrixLines,
+      '',
+    ].join('\n');
+  } else {
+    travelSection = [
+      'No routing data is available, so estimate travel time from the coordinates but assume REAL public transit, not straight lines:',
+      '- Multiply straight-line distance by ~1.4 to approximate route distance, and assume an effective transit speed of ~20 km/h (transit is slower than driving).',
+      '- Be conservative: places more than ~10 km apart usually cannot be combined in a short (few-hour) outing.',
+      '',
+    ].join('\n');
+  }
 
   const instructions = [
     'You are a friendly local trip-planning assistant.',
     'You are given a set of places and ONE continuous time window (a single outing — never multiple days).',
     'Choose the best order to visit the places and a recommended time to spend AT each place (e.g. CN Tower: 1 hour, Ripley\'s Aquarium: 2 hours).',
-    'Use approximate travel time between consecutive places (based on their coordinates) ONLY to judge how many places realistically fit in the window. Do NOT report travel times or clock times.',
-    'A place fits if (total dwell time of places already scheduled) + (approximate travel between them) + (its own dwell time) stays within the window.',
+    'CRITICAL — travel time consumes the window just like dwell time does. Do NOT treat travel as instant or ignore it.',
+    'Compute the total like this: (sum of dwell times of all included places) + (sum of travel times between each consecutive pair) + (required breaks below) must be LESS THAN OR EQUAL TO the window length. If that total exceeds the window, you MUST drop places until it fits.',
+    'Worked example: a 9-hour (540 min) window with 5 places whose dwell times sum to 540 min leaves ZERO minutes for travel — that is impossible, so some places must be dropped.',
+    'Use the provided travel times only for this fitting math. Do NOT print travel times or clock times in the itinerary text.',
+    '',
+    'REALISM — a real person does not tour back-to-back for an entire day. Build in real-life buffers and DO NOT pack the window:',
+    '- Reserve ~45-60 minutes for a meal if the window spans roughly 11:30-13:30 (lunch) and/or 17:30-19:30 (dinner). Count this reserved time in the fitting math above.',
+    '- Add a small buffer (~10-15 min) at each stop for things like finding the entrance, tickets, restrooms, and resting. Count it in the math.',
+    '- Aim to schedule at most ~80% of the window; leave genuine slack so the plan feels relaxed, not rushed. A plan that consumes nearly 100% of the window is unrealistic — drop a place or trim dwell times.',
+    '- Keep per-place dwell times realistic and not padded just to fill the day.',
     '',
     'FITTING RULES — follow exactly:',
-    '- If every place fits, include them ALL. Do not drop anything and do not add any "we had to drop" note.',
-    '- If some places do NOT fit, OMIT them entirely: they must NOT appear in the numbered list AND must NOT appear in the JSON stops.',
-    '- Only after omitting them, add the closing note described below.',
+    '- Include a place ONLY if it still fits after accounting for travel to and from it. If reaching a place would blow the window, OMIT it, even if it seems geographically close.',
+    '- If some places do NOT fit, OMIT them entirely: they must NOT appear in the numbered list AND must NOT appear in the JSON stops. Record their names in the JSON "omittedPlaces" array instead.',
+    '- NEVER write any closing paragraph, apology, or commentary in the Markdown. Do NOT write sentences starting with "Unfortunately". Do NOT mention fitting, timeframes, buffers, or breaks. The app shows the user a note about omitted places automatically from "omittedPlaces" — your job is ONLY the numbered list.',
+    '- END the Markdown immediately after the last numbered list item.',
     '- NEVER list a place and also say it was skipped. Never mention "days" or a "second day".',
     '',
     'FORMAT YOUR RESPONSE IN TWO PARTS:',
-    '1. A short, friendly Markdown itinerary: a brief intro sentence, then a numbered list where each item is "**Place name** — recommended duration" followed by a one-line tip.',
-    '   If (and only if) you omitted places, end with a SEPARATE final paragraph (its own line, not attached to a list item) phrased warmly, e.g.: "Unfortunately, we had to leave out X, Y, and Z as they exceed your timeframe — consider visiting them another day!"',
+    '1. A short, friendly Markdown itinerary: a brief intro sentence, then a numbered list where each item is "**Place name** — recommended duration" followed by a one-line tip. End right after the list — NO closing paragraph.',
     '2. AFTER the Markdown, output a fenced ```json code block (this will be hidden from the user) with this exact shape:',
     '```json',
     '{ "stops": [ { "id": string, "name": string, "durationMinutes": number, "note": string } ], "omittedPlaces": [string] }',
@@ -100,6 +171,7 @@ function buildMessages({ places, start, end }) {
     `Places to visit (${places.length}):`,
     placeLines,
     '',
+    travelSection,
     'Write the Markdown itinerary, then the hidden JSON block.',
   ].join('\n');
 
@@ -122,11 +194,16 @@ app.post('/api/plan-trip', async (req, res) => {
     return res.status(400).json({ error: 'Both start and end times are required.' });
   }
 
+  const travelMatrix = await getTravelMatrixMinutes(places);
+  if (travelMatrix) {
+    console.log(`[plan-trip] Using distance-scaled transit times (2.1x–3.2x) for ${places.length} places.`);
+  }
+
   let hfRes;
   try {
     hfRes = await fetchHfWithRetry({
       model: HF_MODEL,
-      messages: buildMessages({ places, start, end }),
+      messages: buildMessages({ places, start, end, travelMatrix }),
       temperature: 0.3,
       max_tokens: 1024,
       stream: true,
