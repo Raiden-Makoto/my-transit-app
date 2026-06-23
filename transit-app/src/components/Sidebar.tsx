@@ -40,29 +40,31 @@ export default function Sidebar({
   onPlanWithAi,
 }: SidebarProps) {
   const [expandedList, setExpandedList] = useState<string | null>(null);
-  // Per-list inline UI mode: renaming/recoloring vs. confirming deletion.
-  const [listMode, setListMode] = useState<{ id: string; mode: 'edit' | 'delete' } | null>(null);
-  const [draftName, setDraftName] = useState('');
+  const [renamingList, setRenamingList] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
 
   const select = (place: SavedLocation) => {
     onLocationSelect(place);
     onClose();
   };
 
-  const startEdit = (list: PlaceCollection) => {
-    setDraftName(list.name);
-    setListMode({ id: list.id, mode: 'edit' });
+  const startRename = (id: string, name: string) => {
+    setRenamingList(id);
+    setRenameValue(name);
+    setConfirmingDelete(null);
   };
 
-  const saveEdit = (id: string) => {
-    collections.renameCollection(id, draftName);
-    setListMode(null);
+  const submitRename = () => {
+    if (renamingList) collections.renameCollection(renamingList, renameValue);
+    setRenamingList(null);
+    setRenameValue('');
   };
 
-  const confirmDelete = (id: string) => {
+  const doDelete = (id: string) => {
     collections.deleteCollection(id);
     if (expandedList === id) setExpandedList(null);
-    setListMode(null);
+    setConfirmingDelete(null);
   };
 
   return (
@@ -134,143 +136,141 @@ export default function Sidebar({
               const expanded = expandedList === list.id;
               return (
                 <div key={list.id} className="mb-1">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedList(expanded ? null : list.id)}
-                    className="flex w-full items-center px-4 py-2 text-left transition-colors hover:bg-[#f5f5f5]"
-                  >
+                  <div className="group flex w-full items-center px-4 py-2 transition-colors hover:bg-[#f5f5f5]">
                     <span
                       className="flex items-center justify-center w-7 h-7 mr-3 shrink-0 rounded-full"
                       style={{ backgroundColor: `${list.color || '#5f6368'}22`, color: list.color || '#5f6368' }}
                     >
                       <Folder size={16} />
                     </span>
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-[15px] font-medium truncate">{list.name}</span>
-                      <span className="block text-[12px] text-[#5f6368]">
-                        {list.places.length}/{COLLECTION_PLACE_LIMIT} places
-                      </span>
-                    </span>
-                    <span className="ml-2 shrink-0 text-[#5f6368]">
-                      {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                    </span>
-                  </button>
+                    {renamingList === list.id ? (
+                      <input
+                        autoFocus
+                        type="text"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') submitRename();
+                          if (e.key === 'Escape') {
+                            setRenamingList(null);
+                            setRenameValue('');
+                          }
+                        }}
+                        className="flex-1 min-w-0 bg-transparent outline-none border-b border-[#1a73e8] text-[15px] text-[#202124]"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedList(expanded ? null : list.id)}
+                        className="flex flex-1 items-center min-w-0 text-left"
+                      >
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-[15px] font-medium truncate">{list.name}</span>
+                          <span className="block text-[12px] text-[#5f6368]">
+                            {list.places.length}/{COLLECTION_PLACE_LIMIT} places
+                          </span>
+                        </span>
+                        <span className="ml-2 shrink-0 text-[#5f6368]">
+                          {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        </span>
+                      </button>
+                    )}
+
+                    {renamingList === list.id ? (
+                      <button
+                        type="button"
+                        onClick={submitRename}
+                        className="ml-1 shrink-0 rounded-full p-1.5 text-[#1a73e8] hover:bg-[#e8f0fe]"
+                        aria-label="Save list name"
+                      >
+                        <Check size={16} />
+                      </button>
+                    ) : confirmingDelete === list.id ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => doDelete(list.id)}
+                          className="ml-1 shrink-0 rounded-full p-1.5 text-[#c5221f] hover:bg-[#fce8e6]"
+                          aria-label={`Confirm delete list ${list.name}`}
+                        >
+                          <Check size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingDelete(null)}
+                          className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] hover:bg-[#f1f3f4]"
+                          aria-label="Cancel delete"
+                        >
+                          <X size={16} />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => startRename(list.id, list.name)}
+                          className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+                          aria-label={`Rename list ${list.name}`}
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingDelete(list.id)}
+                          className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+                          aria-label={`Delete list ${list.name}`}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </>
+                    )}
+                  </div>
                   {expanded && (
                       <>
-                        {listMode?.id === list.id && listMode.mode === 'edit' ? (
-                          <div className="ml-[52px] mr-4 my-1.5 flex flex-col gap-2">
-                            <input
-                              autoFocus
-                              value={draftName}
-                              onChange={(e) => setDraftName(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') saveEdit(list.id);
-                                if (e.key === 'Escape') setListMode(null);
+                        <div className="flex items-center gap-2 pl-[52px] pr-4 py-1">
+                          {COLLECTION_COLORS.map((color) => (
+                            <button
+                              key={color}
+                              type="button"
+                              onClick={() => collections.setCollectionColor(list.id, color)}
+                              className="w-5 h-5 rounded-full transition-transform hover:scale-110"
+                              style={{
+                                backgroundColor: color,
+                                outline: list.color === color ? `2px solid ${color}` : 'none',
+                                outlineOffset: 2,
                               }}
-                              placeholder="List name"
-                              className="w-full rounded-lg border border-[#dadce0] px-3 py-1.5 text-[14px] outline-none focus:border-[#1a73e8]"
+                              aria-label={`Set ${list.name} color`}
                             />
-                            <div className="flex flex-wrap gap-1.5">
-                              {COLLECTION_COLORS.map((color) => (
-                                <button
-                                  key={color}
-                                  type="button"
-                                  onClick={() => collections.setCollectionColor(list.id, color)}
-                                  className={`w-6 h-6 rounded-full transition-transform hover:scale-110 ${
-                                    list.color === color ? 'ring-2 ring-offset-1 ring-[#202124]' : ''
-                                  }`}
-                                  style={{ backgroundColor: color }}
-                                  aria-label={`Set color ${color}`}
-                                />
-                              ))}
-                            </div>
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => saveEdit(list.id)}
-                                disabled={!draftName.trim()}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium text-white bg-[#1a73e8] disabled:opacity-40"
-                              >
-                                <Check size={16} />
-                                Save
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setListMode(null)}
-                                className="px-3 py-1.5 rounded-full text-[13px] font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : listMode?.id === list.id && listMode.mode === 'delete' ? (
-                          <div className="ml-[52px] mr-4 my-1.5 flex flex-col gap-2">
-                            <p className="text-[13px] text-[#202124]">
-                              Delete <span className="font-medium">{list.name}</span>? This can't be undone.
-                            </p>
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => confirmDelete(list.id)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium text-white bg-[#ea4335]"
-                              >
-                                <Trash2 size={16} />
-                                Delete
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setListMode(null)}
-                                className="px-3 py-1.5 rounded-full text-[13px] font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap gap-2 ml-[52px] mr-4 my-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onViewList(list);
-                                onClose();
-                              }}
-                              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium"
-                              style={{ color: list.color || '#1a73e8', backgroundColor: `${list.color || '#1a73e8'}1a` }}
-                            >
-                              <MapIcon size={16} />
-                              View on map
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onPlanWithAi(list);
-                                onClose();
-                              }}
-                              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium text-[#7b1fa2] bg-[#7b1fa2]/10"
-                            >
-                              <Sparkles size={16} />
-                              Plan with AI
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => startEdit(list)}
-                              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium text-[#5f6368] bg-[#f1f3f4] hover:bg-[#e8eaed]"
-                            >
-                              <Pencil size={15} />
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setListMode({ id: list.id, mode: 'delete' })}
-                              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium text-[#c5221f] bg-[#fce8e6] hover:bg-[#fad2cf]"
-                            >
-                              <Trash2 size={15} />
-                              Delete
-                            </button>
-                          </div>
-                        )}
+                          ))}
+                        </div>
 
-                        {list.places.length === 0 && listMode?.id !== list.id && (
+                        <div className="flex flex-wrap gap-2 ml-[52px] mr-4 my-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onViewList(list);
+                              onClose();
+                            }}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium"
+                            style={{ color: list.color || '#1a73e8', backgroundColor: `${list.color || '#1a73e8'}1a` }}
+                          >
+                            <MapIcon size={16} />
+                            View on map
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onPlanWithAi(list);
+                              onClose();
+                            }}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium text-[#7b1fa2] bg-[#7b1fa2]/10"
+                          >
+                            <Sparkles size={16} />
+                            Plan with AI
+                          </button>
+                        </div>
+
+                        {list.places.length === 0 && (
                           <p className="pl-[60px] pr-4 py-1.5 text-[13px] text-[#5f6368]">No places yet</p>
                         )}
 

@@ -60,6 +60,7 @@ export default function SearchBox({
   const [newListName, setNewListName] = useState('');
   const [renamingList, setRenamingList] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { results, loading, error } = usePlaceSearch(query, viewport);
@@ -452,6 +453,30 @@ export default function SearchBox({
                         >
                           <Check size={16} />
                         </button>
+                      ) : confirmingDelete === list.id ? (
+                        <>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              collections.deleteCollection(list.id);
+                              setConfirmingDelete(null);
+                            }}
+                            className="ml-1 shrink-0 rounded-full p-1.5 text-[#c5221f] hover:bg-[#fce8e6]"
+                            aria-label={`Confirm delete list ${list.name}`}
+                          >
+                            <Check size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => setConfirmingDelete(null)}
+                            className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] hover:bg-[#f1f3f4]"
+                            aria-label="Cancel delete"
+                          >
+                            <X size={16} />
+                          </button>
+                        </>
                       ) : (
                         <>
                           <button
@@ -466,7 +491,7 @@ export default function SearchBox({
                           <button
                             type="button"
                             onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => collections.deleteCollection(list.id)}
+                            onClick={() => setConfirmingDelete(list.id)}
                             className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
                             aria-label={`Delete list ${list.name}`}
                           >
