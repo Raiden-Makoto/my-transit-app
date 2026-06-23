@@ -165,22 +165,34 @@ export default function Sidebar({
                         </div>
 
                         {list.places.map((place) => (
-                          <button
+                          <div
                             key={place.id}
-                            type="button"
-                            onClick={() => select(place)}
-                            className="flex w-full items-center pl-[52px] pr-4 py-2 text-left transition-colors hover:bg-[#f5f5f5]"
+                            className="group flex w-full items-center pl-[52px] pr-4 py-2 transition-colors hover:bg-[#f5f5f5]"
                           >
-                            <MapPin size={16} className="mr-3 shrink-0 text-[#5f6368]" />
-                            <span className="flex-1 min-w-0">
-                              <span className="block text-[14px] truncate">{place.primaryText}</span>
-                              {place.secondaryText && (
-                                <span className="block text-[12px] text-[#5f6368] truncate">
-                                  {place.secondaryText}
-                                </span>
-                              )}
-                            </span>
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => select(place)}
+                              className="flex flex-1 items-center min-w-0 text-left"
+                            >
+                              <MapPin size={16} className="mr-3 shrink-0 text-[#5f6368]" />
+                              <span className="flex-1 min-w-0">
+                                <span className="block text-[14px] truncate">{place.primaryText}</span>
+                                {place.secondaryText && (
+                                  <span className="block text-[12px] text-[#5f6368] truncate">
+                                    {place.secondaryText}
+                                  </span>
+                                )}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => collections.removePlaceFromCollection(list.id, place.id)}
+                              className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#e8eaed] group-hover:opacity-100"
+                              aria-label={`Remove ${place.primaryText} from ${list.name}`}
+                            >
+                              <X size={15} />
+                            </button>
+                          </div>
                         ))}
                       </>
                     ))}
