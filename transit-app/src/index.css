@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Manual (class-based) dark mode: `dark:` utilities apply under a `.dark` root. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --text: #6b6375;
   --text-h: #08060d;
@@ -56,6 +59,23 @@
   width: 100%;
   min-height: 100svh;
   box-sizing: border-box;
+}
+
+/* Dark-mode treatment for Leaflet's own chrome (attribution + popups). */
+.dark .leaflet-control-attribution {
+  background: rgba(42, 42, 46, 0.8);
+  color: #9aa0a6;
+}
+.dark .leaflet-control-attribution a {
+  color: #8ab4f8;
+}
+.dark .leaflet-popup-content-wrapper,
+.dark .leaflet-popup-tip {
+  background: #2a2a2e;
+  color: #e8eaed;
+}
+.dark .leaflet-popup-content a {
+  color: #8ab4f8;
 }
 
 body {

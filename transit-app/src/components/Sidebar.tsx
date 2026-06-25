@@ -72,25 +72,25 @@ export default function Sidebar({
       {open && <div className="absolute inset-0 z-[1090] bg-black/20" onClick={onClose} />}
 
       <aside
-        className={`absolute top-0 left-0 z-[1100] h-full w-[min(85vw,360px)] bg-white shadow-[2px_0_12px_rgba(0,0,0,0.2)] font-sans flex flex-col transition-transform duration-200 ${
+        className={`absolute top-0 left-0 z-[1100] h-full w-[min(85vw,360px)] bg-white dark:bg-[#1f1f23] shadow-[2px_0_12px_rgba(0,0,0,0.2)] font-sans flex flex-col transition-transform duration-200 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex items-center justify-between px-4 h-14 border-b border-[#eceff1]">
-          <h2 className="m-0 text-[18px] font-semibold" style={{ color: '#000' }}>
+        <div className="flex items-center justify-between px-4 h-14 border-b border-[#eceff1] dark:border-[#3a3a3e]">
+          <h2 className="m-0 text-[18px] font-semibold text-[#000] dark:text-[#e8eaed]">
             Your places
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-[#5f6368] hover:bg-[#f1f3f4]"
+            className="rounded-full p-2 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]"
             aria-label="Close sidebar"
           >
             <X size={20} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto py-2 text-[#202124]">
+        <div className="flex-1 overflow-y-auto py-2 text-[#202124] dark:text-[#e8eaed]">
           {/* Saved */}
           <SectionHeader icon={<Star size={16} className="text-[#1a73e8]" />} title="Saved" />
           {savedPlaces.saved.length === 0 ? (
@@ -107,17 +107,17 @@ export default function Sidebar({
             ))
           )}
 
-          <div className="h-px my-2 bg-[#eceff1]" />
+          <div className="h-px my-2 bg-[#eceff1] dark:bg-[#3a3a3e]" />
 
           {/* Recents */}
-          <SectionHeader icon={<Clock size={16} className="text-[#5f6368]" />} title="Recents" />
+          <SectionHeader icon={<Clock size={16} className="text-[#5f6368] dark:text-[#9aa0a6]" />} title="Recents" />
           {history.recents.length === 0 ? (
             <Empty text="No recent places" />
           ) : (
             history.recents.map((place) => (
               <Row
                 key={place.id}
-                icon={<Clock size={18} className="text-[#5f6368]" />}
+                icon={<Clock size={18} className="text-[#5f6368] dark:text-[#9aa0a6]" />}
                 place={place}
                 onSelect={() => select(place)}
                 onRemove={() => history.removeFromHistory(place.id)}
@@ -125,10 +125,10 @@ export default function Sidebar({
             ))
           )}
 
-          <div className="h-px my-2 bg-[#eceff1]" />
+          <div className="h-px my-2 bg-[#eceff1] dark:bg-[#3a3a3e]" />
 
           {/* Collections */}
-          <SectionHeader icon={<Folder size={16} className="text-[#5f6368]" />} title="Lists" />
+          <SectionHeader icon={<Folder size={16} className="text-[#5f6368] dark:text-[#9aa0a6]" />} title="Lists" />
           {collections.collections.length === 0 ? (
             <Empty text="No lists yet" />
           ) : (
@@ -136,7 +136,7 @@ export default function Sidebar({
               const expanded = expandedList === list.id;
               return (
                 <div key={list.id} className="mb-1">
-                  <div className="group flex w-full items-center px-4 py-2 transition-colors hover:bg-[#f5f5f5]">
+                  <div className="group flex w-full items-center px-4 py-2 transition-colors hover:bg-[#f5f5f5] dark:hover:bg-[#3a3a3e]">
                     <span
                       className="flex items-center justify-center w-7 h-7 mr-3 shrink-0 rounded-full"
                       style={{ backgroundColor: `${list.color || '#5f6368'}22`, color: list.color || '#5f6368' }}
@@ -156,7 +156,7 @@ export default function Sidebar({
                             setRenameValue('');
                           }
                         }}
-                        className="flex-1 min-w-0 bg-transparent outline-none border-b border-[#1a73e8] text-[15px] text-[#202124]"
+                        className="flex-1 min-w-0 bg-transparent outline-none border-b border-[#1a73e8] text-[15px] text-[#202124] dark:text-[#e8eaed]"
                       />
                     ) : (
                       <button
@@ -166,11 +166,11 @@ export default function Sidebar({
                       >
                         <span className="flex-1 min-w-0">
                           <span className="block text-[15px] font-medium truncate">{list.name}</span>
-                          <span className="block text-[12px] text-[#5f6368]">
+                          <span className="block text-[12px] text-[#5f6368] dark:text-[#9aa0a6]">
                             {list.places.length}/{COLLECTION_PLACE_LIMIT} places
                           </span>
                         </span>
-                        <span className="ml-2 shrink-0 text-[#5f6368]">
+                        <span className="ml-2 shrink-0 text-[#5f6368] dark:text-[#9aa0a6]">
                           {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                         </span>
                       </button>
@@ -198,7 +198,7 @@ export default function Sidebar({
                         <button
                           type="button"
                           onClick={() => setConfirmingDelete(null)}
-                          className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] hover:bg-[#f1f3f4]"
+                          className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]"
                           aria-label="Cancel delete"
                         >
                           <X size={16} />
@@ -209,7 +209,7 @@ export default function Sidebar({
                         <button
                           type="button"
                           onClick={() => startRename(list.id, list.name)}
-                          className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+                          className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] dark:text-[#9aa0a6] opacity-0 transition-opacity hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e] group-hover:opacity-100"
                           aria-label={`Rename list ${list.name}`}
                         >
                           <Pencil size={16} />
@@ -217,7 +217,7 @@ export default function Sidebar({
                         <button
                           type="button"
                           onClick={() => setConfirmingDelete(list.id)}
-                          className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+                          className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] dark:text-[#9aa0a6] opacity-0 transition-opacity hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e] group-hover:opacity-100"
                           aria-label={`Delete list ${list.name}`}
                         >
                           <Trash2 size={16} />
@@ -271,24 +271,24 @@ export default function Sidebar({
                         </div>
 
                         {list.places.length === 0 && (
-                          <p className="pl-[60px] pr-4 py-1.5 text-[13px] text-[#5f6368]">No places yet</p>
+                          <p className="pl-[60px] pr-4 py-1.5 text-[13px] text-[#5f6368] dark:text-[#9aa0a6]">No places yet</p>
                         )}
 
                         {list.places.map((place) => (
                           <div
                             key={place.id}
-                            className="group flex w-full items-center pl-[52px] pr-4 py-2 transition-colors hover:bg-[#f5f5f5]"
+                            className="group flex w-full items-center pl-[52px] pr-4 py-2 transition-colors hover:bg-[#f5f5f5] dark:hover:bg-[#3a3a3e]"
                           >
                             <button
                               type="button"
                               onClick={() => select(place)}
                               className="flex flex-1 items-center min-w-0 text-left"
                             >
-                              <MapPin size={16} className="mr-3 shrink-0 text-[#5f6368]" />
+                              <MapPin size={16} className="mr-3 shrink-0 text-[#5f6368] dark:text-[#9aa0a6]" />
                               <span className="flex-1 min-w-0">
                                 <span className="block text-[14px] truncate">{place.primaryText}</span>
                                 {place.secondaryText && (
-                                  <span className="block text-[12px] text-[#5f6368] truncate">
+                                  <span className="block text-[12px] text-[#5f6368] dark:text-[#9aa0a6] truncate">
                                     {place.secondaryText}
                                   </span>
                                 )}
@@ -297,7 +297,7 @@ export default function Sidebar({
                             <button
                               type="button"
                               onClick={() => collections.removePlaceFromCollection(list.id, place.id)}
-                              className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#e8eaed] group-hover:opacity-100"
+                              className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] dark:text-[#9aa0a6] opacity-0 transition-opacity hover:bg-[#e8eaed] group-hover:opacity-100"
                               aria-label={`Remove ${place.primaryText} from ${list.name}`}
                             >
                               <X size={15} />
@@ -320,13 +320,13 @@ function SectionHeader({ icon, title }: { icon: ReactNode; title: string }) {
   return (
     <div className="flex items-center gap-2 px-4 pt-1 pb-1">
       {icon}
-      <span className="text-[12px] font-medium uppercase tracking-wide text-[#5f6368]">{title}</span>
+      <span className="text-[12px] font-medium uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6]">{title}</span>
     </div>
   );
 }
 
 function Empty({ text }: { text: string }) {
-  return <p className="px-4 py-2 text-[13px] text-[#5f6368]">{text}</p>;
+  return <p className="px-4 py-2 text-[13px] text-[#5f6368] dark:text-[#9aa0a6]">{text}</p>;
 }
 
 function Row({
@@ -341,18 +341,18 @@ function Row({
   onRemove: () => void;
 }) {
   return (
-    <div className="group flex w-full items-center px-4 py-2 transition-colors hover:bg-[#f5f5f5]">
+    <div className="group flex w-full items-center px-4 py-2 transition-colors hover:bg-[#f5f5f5] dark:hover:bg-[#3a3a3e]">
       <button type="button" onClick={onSelect} className="flex flex-1 items-center min-w-0 text-left">
-        <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4]">{icon}</span>
+        <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] dark:bg-[#3a3a3e]">{icon}</span>
         <span className="flex-1 min-w-0">
           <span className="block text-[15px] truncate">{place.primaryText}</span>
-          {place.secondaryText && <span className="block text-[13px] text-[#5f6368] truncate">{place.secondaryText}</span>}
+          {place.secondaryText && <span className="block text-[13px] text-[#5f6368] dark:text-[#9aa0a6] truncate">{place.secondaryText}</span>}
         </span>
       </button>
       <button
         type="button"
         onClick={onRemove}
-        className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+        className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] dark:text-[#9aa0a6] opacity-0 transition-opacity hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e] group-hover:opacity-100"
         aria-label={`Remove ${place.primaryText}`}
       >
         <X size={16} />

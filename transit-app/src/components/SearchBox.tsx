@@ -131,19 +131,19 @@ export default function SearchBox({
         : 'Search Transit Map';
 
   const renderSavedRow = (slot: Slot, loc: SavedLocation | null, label: string, icon: ReactNode) => (
-    <div className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5]">
+    <div className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5] dark:hover:bg-[#3a3a3e]">
       <button
         type="button"
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => loc && selectLocation(loc)}
         className="flex flex-1 items-center min-w-0 text-left"
       >
-        <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] text-[#5f6368]">
+        <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] dark:bg-[#3a3a3e] text-[#5f6368] dark:text-[#9aa0a6]">
           {icon}
         </span>
         <span className="flex-1 min-w-0">
-          <h3 className="m-0 text-[15px] font-medium leading-tight text-[#202124] truncate">{label}</h3>
-          <p className="m-0 text-[13px] leading-snug text-[#5f6368] truncate">{loc ? formatAddress(loc) : 'Set location'}</p>
+          <h3 className="m-0 text-[15px] font-medium leading-tight text-[#202124] dark:text-[#e8eaed] truncate">{label}</h3>
+          <p className="m-0 text-[13px] leading-snug text-[#5f6368] dark:text-[#9aa0a6] truncate">{loc ? formatAddress(loc) : 'Set location'}</p>
         </span>
       </button>
       <div className="flex items-center shrink-0 ml-2">
@@ -162,7 +162,7 @@ export default function SearchBox({
             type="button"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => clearSlot(slot)}
-            className="ml-1 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+            className="ml-1 rounded-full p-1.5 text-[#5f6368] dark:text-[#9aa0a6] opacity-0 transition-opacity hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e] group-hover:opacity-100"
             aria-label={`Remove ${label}`}
           >
             <Trash2 size={16} />
@@ -174,7 +174,7 @@ export default function SearchBox({
 
   return (
     <div
-      className="absolute top-3 left-[80px] z-[1000] w-[min(calc(92vw-80px),400px)] font-sans text-[#202124]"
+      className="absolute top-3 left-[80px] z-[1000] w-[min(calc(92vw-80px),400px)] font-sans text-[#202124] dark:text-[#e8eaed]"
       onFocus={() => setFocused(true)}
       onBlur={(e) => {
         // Keep the sheet open while focus moves between elements inside the box
@@ -185,8 +185,8 @@ export default function SearchBox({
       }}
     >
       {/* Floating search pill */}
-      <div className="flex items-center h-12 bg-white rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.35)]">
-        <span className="flex items-center justify-center pl-[14px] pr-2 text-[#5f6368]">
+      <div className="flex items-center h-12 bg-white dark:bg-[#2a2a2e] rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.35)]">
+        <span className="flex items-center justify-center pl-[14px] pr-2 text-[#5f6368] dark:text-[#9aa0a6]">
           <Search size={20} />
         </span>
         <input
@@ -199,19 +199,19 @@ export default function SearchBox({
             if (e.key === 'Escape') reset();
           }}
           placeholder={placeholder}
-          className="flex-1 h-full bg-transparent border-none outline-none text-[15px] text-[#202124] placeholder:text-[#5f6368]"
+          className="flex-1 h-full bg-transparent border-none outline-none text-[15px] text-[#202124] dark:text-[#e8eaed] placeholder:text-[#5f6368] dark:text-[#9aa0a6]"
         />
         {query && (
           <button
             type="button"
             onClick={() => setQuery('')}
-            className="p-2 mr-0.5 rounded-full text-[#5f6368] transition-colors hover:bg-[#f1f3f4]"
+            className="p-2 mr-0.5 rounded-full text-[#5f6368] dark:text-[#9aa0a6] transition-colors hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]"
             aria-label="Clear search"
           >
             <X size={20} />
           </button>
         )}
-        <span className="w-px h-6 bg-[#e0e0e0]" />
+        <span className="w-px h-6 bg-[#e0e0e0] dark:bg-[#3a3a3e]" />
         <button
           type="button"
           className="flex items-center justify-center w-12 h-full rounded-r-lg text-[#1a73e8] transition-colors hover:bg-[#e8f0fe]"
@@ -223,10 +223,10 @@ export default function SearchBox({
 
       {/* Suggestions sheet */}
       {focused && (
-        <div className="mt-1.5 bg-white rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] overflow-hidden py-2">
+        <div className="mt-1.5 bg-white dark:bg-[#2a2a2e] rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] overflow-hidden py-2">
           {assigning && (
-            <div className="flex items-center justify-between px-4 py-2 mb-1 border-b border-[#eceff1]">
-              <span className="text-[13px] font-medium text-[#5f6368]">
+            <div className="flex items-center justify-between px-4 py-2 mb-1 border-b border-[#eceff1] dark:border-[#3a3a3e]">
+              <span className="text-[13px] font-medium text-[#5f6368] dark:text-[#9aa0a6]">
                 Search for a place to set as {assigning === 'home' ? 'Home' : 'Work'}
               </span>
               <button
@@ -243,7 +243,7 @@ export default function SearchBox({
           {hasQuery ? (
             <>
               {loading && (
-                <div className="flex items-center gap-3 px-4 py-3 text-[14px] text-[#5f6368]">
+                <div className="flex items-center gap-3 px-4 py-3 text-[14px] text-[#5f6368] dark:text-[#9aa0a6]">
                   <Loader2 size={18} className="animate-spin" />
                   Searching...
                 </div>
@@ -252,7 +252,7 @@ export default function SearchBox({
               {!loading && error && <div className="px-4 py-3 text-[14px] text-[#b71c1c]">{error}</div>}
 
               {!loading && !error && results.length === 0 && (
-                <div className="px-4 py-3 text-[14px] text-[#5f6368]">No results found</div>
+                <div className="px-4 py-3 text-[14px] text-[#5f6368] dark:text-[#9aa0a6]">No results found</div>
               )}
 
               {!loading &&
@@ -261,7 +261,7 @@ export default function SearchBox({
                   return (
                     <div
                       key={place.id}
-                      className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5]"
+                      className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5] dark:hover:bg-[#3a3a3e]"
                     >
                       <button
                         type="button"
@@ -269,13 +269,13 @@ export default function SearchBox({
                         onClick={() => selectLocation(place)}
                         className="flex flex-1 items-center min-w-0 text-left"
                       >
-                        <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] text-[#5f6368]">
+                        <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] dark:bg-[#3a3a3e] text-[#5f6368] dark:text-[#9aa0a6]">
                           <MapPin size={18} />
                         </span>
                         <span className="flex-1 min-w-0">
-                          <h3 className="m-0 text-[15px] leading-tight text-[#202124] truncate">{place.primaryText}</h3>
+                          <h3 className="m-0 text-[15px] leading-tight text-[#202124] dark:text-[#e8eaed] truncate">{place.primaryText}</h3>
                           {place.secondaryText && (
-                            <p className="m-0 text-[13px] leading-snug text-[#5f6368] truncate">{place.secondaryText}</p>
+                            <p className="m-0 text-[13px] leading-snug text-[#5f6368] dark:text-[#9aa0a6] truncate">{place.secondaryText}</p>
                           )}
                         </span>
                       </button>
@@ -283,7 +283,7 @@ export default function SearchBox({
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => onAddToList(place)}
-                        className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+                        className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] dark:text-[#9aa0a6] opacity-0 transition-opacity hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e] group-hover:opacity-100"
                         aria-label={`Add ${place.primaryText} to a list`}
                       >
                         <FolderPlus size={18} />
@@ -292,8 +292,8 @@ export default function SearchBox({
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => toggleSaved(place)}
-                        className={`ml-1 shrink-0 rounded-full p-1.5 transition-opacity hover:bg-[#f1f3f4] ${
-                          starred ? 'text-[#1a73e8] opacity-100' : 'text-[#5f6368] opacity-0 group-hover:opacity-100'
+                        className={`ml-1 shrink-0 rounded-full p-1.5 transition-opacity hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e] ${
+                          starred ? 'text-[#1a73e8] opacity-100' : 'text-[#5f6368] dark:text-[#9aa0a6] opacity-0 group-hover:opacity-100'
                         }`}
                         aria-label={starred ? `Unsave ${place.primaryText}` : `Save ${place.primaryText}`}
                         aria-pressed={starred}
@@ -311,12 +311,12 @@ export default function SearchBox({
 
               {saved.length > 0 && (
                 <>
-                  <div className="h-px my-1.5 bg-[#eceff1]" />
-                  <p className="px-4 pt-1 pb-1 text-[12px] font-medium uppercase tracking-wide text-[#5f6368]">Saved</p>
+                  <div className="h-px my-1.5 bg-[#eceff1] dark:bg-[#3a3a3e]" />
+                  <p className="px-4 pt-1 pb-1 text-[12px] font-medium uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6]">Saved</p>
                   {saved.map((place) => (
                     <div
                       key={place.id}
-                      className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5]"
+                      className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5] dark:hover:bg-[#3a3a3e]"
                     >
                       <button
                         type="button"
@@ -328,9 +328,9 @@ export default function SearchBox({
                           <Star size={18} fill="currentColor" />
                         </span>
                         <span className="flex-1 min-w-0">
-                          <h3 className="m-0 text-[15px] leading-tight text-[#202124] truncate">{place.primaryText}</h3>
+                          <h3 className="m-0 text-[15px] leading-tight text-[#202124] dark:text-[#e8eaed] truncate">{place.primaryText}</h3>
                           {place.secondaryText && (
-                            <p className="m-0 text-[13px] leading-snug text-[#5f6368] truncate">{place.secondaryText}</p>
+                            <p className="m-0 text-[13px] leading-snug text-[#5f6368] dark:text-[#9aa0a6] truncate">{place.secondaryText}</p>
                           )}
                         </span>
                       </button>
@@ -338,7 +338,7 @@ export default function SearchBox({
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => removeSaved(place.id)}
-                        className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+                        className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] dark:text-[#9aa0a6] opacity-0 transition-opacity hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e] group-hover:opacity-100"
                         aria-label={`Remove ${place.primaryText} from saved`}
                       >
                         <X size={16} />
@@ -348,9 +348,9 @@ export default function SearchBox({
                 </>
               )}
 
-              <div className="h-px my-1.5 bg-[#eceff1]" />
+              <div className="h-px my-1.5 bg-[#eceff1] dark:bg-[#3a3a3e]" />
               <div className="flex items-center justify-between px-4 pt-1 pb-1">
-                <p className="m-0 text-[12px] font-medium uppercase tracking-wide text-[#5f6368]">Your lists</p>
+                <p className="m-0 text-[12px] font-medium uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6]">Your lists</p>
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
@@ -363,7 +363,7 @@ export default function SearchBox({
 
               {creatingList && (
                 <div className="flex items-center gap-2 px-4 py-2">
-                  <FolderPlus size={18} className="shrink-0 text-[#5f6368]" />
+                  <FolderPlus size={18} className="shrink-0 text-[#5f6368] dark:text-[#9aa0a6]" />
                   <input
                     autoFocus
                     type="text"
@@ -378,7 +378,7 @@ export default function SearchBox({
                       }
                     }}
                     placeholder="New list name"
-                    className="flex-1 min-w-0 bg-transparent outline-none text-[14px] text-[#202124] placeholder:text-[#5f6368]"
+                    className="flex-1 min-w-0 bg-transparent outline-none text-[14px] text-[#202124] dark:text-[#e8eaed] placeholder:text-[#5f6368] dark:text-[#9aa0a6]"
                   />
                   <button
                     type="button"
@@ -393,14 +393,14 @@ export default function SearchBox({
               )}
 
               {collections.collections.length === 0 && !creatingList && (
-                <p className="px-4 py-2 text-[13px] text-[#5f6368]">No lists yet</p>
+                <p className="px-4 py-2 text-[13px] text-[#5f6368] dark:text-[#9aa0a6]">No lists yet</p>
               )}
 
               {collections.collections.map((list) => {
                 const expanded = expandedList === list.id;
                 return (
                   <div key={list.id}>
-                    <div className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5]">
+                    <div className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5] dark:hover:bg-[#3a3a3e]">
                       <span
                         className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full"
                         style={{ backgroundColor: `${list.color || '#5f6368'}22`, color: list.color || '#5f6368' }}
@@ -422,7 +422,7 @@ export default function SearchBox({
                               setRenameValue('');
                             }
                           }}
-                          className="flex-1 min-w-0 bg-transparent outline-none border-b border-[#1a73e8] text-[15px] text-[#202124]"
+                          className="flex-1 min-w-0 bg-transparent outline-none border-b border-[#1a73e8] text-[15px] text-[#202124] dark:text-[#e8eaed]"
                         />
                       ) : (
                         <button
@@ -432,12 +432,12 @@ export default function SearchBox({
                           className="flex flex-1 items-center min-w-0 text-left"
                         >
                           <span className="flex-1 min-w-0">
-                            <h3 className="m-0 text-[15px] leading-tight text-[#202124] truncate">{list.name}</h3>
-                            <p className="m-0 text-[13px] leading-snug text-[#5f6368]">
+                            <h3 className="m-0 text-[15px] leading-tight text-[#202124] dark:text-[#e8eaed] truncate">{list.name}</h3>
+                            <p className="m-0 text-[13px] leading-snug text-[#5f6368] dark:text-[#9aa0a6]">
                               {list.places.length}/{COLLECTION_PLACE_LIMIT} places
                             </p>
                           </span>
-                          <span className="ml-2 shrink-0 text-[#5f6368]">
+                          <span className="ml-2 shrink-0 text-[#5f6368] dark:text-[#9aa0a6]">
                             {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                           </span>
                         </button>
@@ -471,7 +471,7 @@ export default function SearchBox({
                             type="button"
                             onMouseDown={(e) => e.preventDefault()}
                             onClick={() => setConfirmingDelete(null)}
-                            className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] hover:bg-[#f1f3f4]"
+                            className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]"
                             aria-label="Cancel delete"
                           >
                             <X size={16} />
@@ -483,7 +483,7 @@ export default function SearchBox({
                             type="button"
                             onMouseDown={(e) => e.preventDefault()}
                             onClick={() => startRename(list.id, list.name)}
-                            className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+                            className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] dark:text-[#9aa0a6] opacity-0 transition-opacity hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e] group-hover:opacity-100"
                             aria-label={`Rename list ${list.name}`}
                           >
                             <Pencil size={16} />
@@ -492,7 +492,7 @@ export default function SearchBox({
                             type="button"
                             onMouseDown={(e) => e.preventDefault()}
                             onClick={() => setConfirmingDelete(list.id)}
-                            className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+                            className="ml-1 shrink-0 rounded-full p-1.5 text-[#5f6368] dark:text-[#9aa0a6] opacity-0 transition-opacity hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e] group-hover:opacity-100"
                             aria-label={`Delete list ${list.name}`}
                           >
                             <Trash2 size={16} />
@@ -523,12 +523,12 @@ export default function SearchBox({
 
                     {expanded &&
                       (list.places.length === 0 ? (
-                        <p className="pl-[68px] pr-4 py-2 text-[13px] text-[#5f6368]">No places yet</p>
+                        <p className="pl-[68px] pr-4 py-2 text-[13px] text-[#5f6368] dark:text-[#9aa0a6]">No places yet</p>
                       ) : (
                         list.places.map((place) => (
                           <div
                             key={place.id}
-                            className="group/place flex w-full items-center pl-[60px] pr-4 py-2 transition-colors hover:bg-[#f5f5f5]"
+                            className="group/place flex w-full items-center pl-[60px] pr-4 py-2 transition-colors hover:bg-[#f5f5f5] dark:hover:bg-[#3a3a3e]"
                           >
                             <button
                               type="button"
@@ -536,11 +536,11 @@ export default function SearchBox({
                               onClick={() => selectLocation(place)}
                               className="flex flex-1 items-center min-w-0 text-left"
                             >
-                              <MapPin size={16} className="mr-3 shrink-0 text-[#5f6368]" />
+                              <MapPin size={16} className="mr-3 shrink-0 text-[#5f6368] dark:text-[#9aa0a6]" />
                               <span className="flex-1 min-w-0">
-                                <span className="block text-[14px] text-[#202124] truncate">{place.primaryText}</span>
+                                <span className="block text-[14px] text-[#202124] dark:text-[#e8eaed] truncate">{place.primaryText}</span>
                                 {place.secondaryText && (
-                                  <span className="block text-[12px] text-[#5f6368] truncate">{place.secondaryText}</span>
+                                  <span className="block text-[12px] text-[#5f6368] dark:text-[#9aa0a6] truncate">{place.secondaryText}</span>
                                 )}
                               </span>
                             </button>
@@ -548,7 +548,7 @@ export default function SearchBox({
                               type="button"
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={() => collections.removePlaceFromCollection(list.id, place.id)}
-                              className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover/place:opacity-100"
+                              className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] dark:text-[#9aa0a6] opacity-0 transition-opacity hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e] group-hover/place:opacity-100"
                               aria-label={`Remove ${place.primaryText} from ${list.name}`}
                             >
                               <X size={14} />
@@ -560,12 +560,12 @@ export default function SearchBox({
                 );
               })}
 
-              {recents.length > 0 && <div className="h-px my-1.5 bg-[#eceff1]" />}
+              {recents.length > 0 && <div className="h-px my-1.5 bg-[#eceff1] dark:bg-[#3a3a3e]" />}
 
               {recents.map((recent) => (
                 <div
                   key={recent.id}
-                  className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5]"
+                  className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5] dark:hover:bg-[#3a3a3e]"
                 >
                   <button
                     type="button"
@@ -573,19 +573,19 @@ export default function SearchBox({
                     onClick={() => selectLocation(recent)}
                     className="flex flex-1 items-center min-w-0 text-left"
                   >
-                    <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] text-[#5f6368]">
+                    <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#f1f3f4] dark:bg-[#3a3a3e] text-[#5f6368] dark:text-[#9aa0a6]">
                       <Clock size={18} />
                     </span>
                     <span className="flex-1 min-w-0">
-                      <h3 className="m-0 text-[15px] leading-tight text-[#202124] truncate">{recent.primaryText}</h3>
-                      <p className="m-0 text-[13px] leading-snug text-[#5f6368] truncate">{recent.secondaryText}</p>
+                      <h3 className="m-0 text-[15px] leading-tight text-[#202124] dark:text-[#e8eaed] truncate">{recent.primaryText}</h3>
+                      <p className="m-0 text-[13px] leading-snug text-[#5f6368] dark:text-[#9aa0a6] truncate">{recent.secondaryText}</p>
                     </span>
                   </button>
                   <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => removeFromHistory(recent.id)}
-                    className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] opacity-0 transition-opacity hover:bg-[#f1f3f4] group-hover:opacity-100"
+                    className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] dark:text-[#9aa0a6] opacity-0 transition-opacity hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e] group-hover:opacity-100"
                     aria-label={`Remove ${recent.primaryText} from history`}
                   >
                     <X size={16} />

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { Menu, X, Route, Sparkles, TrainFront } from 'lucide-react';
+import { Menu, X, Route, Sparkles, TrainFront, Sun, Moon } from 'lucide-react';
 import SearchBox from './components/SearchBox';
 import CollectionPicker from './components/CollectionPicker';
 import Sidebar from './components/Sidebar';
@@ -11,6 +11,7 @@ const AiTripPlanner = lazy(() => import('./components/AiTripPlanner'));
 import { useSavedPlaces } from './hooks/useSavedPlaces';
 import { useCollections } from './hooks/useCollections';
 import { useLocationHistory } from './hooks/useLocationHistory';
+import { useTheme } from './hooks/useTheme';
 import type { SearchViewport } from './hooks/usePlaceSearch';
 import type { PlaceCollection, SavedLocation, TripLeg } from './types/location';
 
@@ -29,6 +30,7 @@ function App() {
   const [tripInitialLegs, setTripInitialLegs] = useState<TripLeg[] | null>(null);
   const [aiStops, setAiStops] = useState<SavedLocation[] | null>(null);
   const [showCorridors, setShowCorridors] = useState(true);
+  const { theme, toggleTheme } = useTheme();
   const savedPlaces = useSavedPlaces();
   const collections = useCollections();
   const history = useLocationHistory();
@@ -140,7 +142,7 @@ function App() {
       <button
         type="button"
         onClick={() => setSidebarOpen(true)}
-        className="absolute top-3 left-3 z-[1000] flex items-center justify-center w-12 h-12 bg-white rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[#5f6368] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow"
+        className="absolute top-3 left-3 z-[1000] flex items-center justify-center w-12 h-12 bg-white dark:bg-[#2a2a2e] rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[#5f6368] dark:text-[#9aa0a6] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow"
         aria-label="Open your places"
       >
         <Menu size={22} />
@@ -165,18 +167,29 @@ function App() {
           onClick={() => setShowCorridors((v) => !v)}
           aria-pressed={showCorridors}
           className={`flex items-center gap-2 h-11 px-4 rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.3)] text-[14px] font-medium transition-colors font-sans ${
-            showCorridors ? 'bg-[#1a73e8] text-white hover:bg-[#1765cc]' : 'bg-white text-[#202124] hover:bg-[#f1f3f4]'
+            showCorridors
+              ? 'bg-[#1a73e8] text-white hover:bg-[#1765cc]'
+              : 'bg-white text-[#202124] hover:bg-[#f1f3f4] dark:bg-[#2a2a2e] dark:text-[#e8eaed] dark:hover:bg-[#3a3a3e]'
           }`}
           aria-label="Toggle rapid transit corridors"
         >
           <TrainFront size={18} />
           Transit lines
         </button>
+
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="flex items-center justify-center w-11 h-11 rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.3)] bg-white text-[#202124] hover:bg-[#f1f3f4] dark:bg-[#2a2a2e] dark:text-[#e8eaed] dark:hover:bg-[#3a3a3e] transition-colors"
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
       </div>
 
       {showCorridors && (
-        <div className="absolute bottom-4 right-3 z-[1000] bg-white rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] px-3 py-2.5 font-sans">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-[#5f6368] mb-1.5">
+        <div className="absolute bottom-4 right-3 z-[1000] bg-white dark:bg-[#2a2a2e] rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] px-3 py-2.5 font-sans">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6] mb-1.5">
             Rapid transit
           </div>
           <ul className="space-y-1.5">
@@ -189,7 +202,7 @@ function App() {
               { name: 'RapidBus', color: '#008522' },
               { name: '99 B-Line', color: '#d04110' },
             ].map((row) => (
-              <li key={row.name} className="flex items-center gap-2 text-[12px] text-[#202124]">
+              <li key={row.name} className="flex items-center gap-2 text-[12px] text-[#202124] dark:text-[#e8eaed]">
                 <span
                   className="inline-block w-5 h-[3px] rounded-full"
                   style={
@@ -220,7 +233,7 @@ function App() {
         <button
           type="button"
           onClick={() => setViewedList(null)}
-          className="absolute top-3 right-3 z-[1000] flex items-center gap-2 h-10 pl-4 pr-3 bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#202124] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
+          className="absolute top-3 right-3 z-[1000] flex items-center gap-2 h-10 pl-4 pr-3 bg-white dark:bg-[#2a2a2e] rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#202124] dark:text-[#e8eaed] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
           aria-label="Clear list pins"
         >
           <span
@@ -228,7 +241,7 @@ function App() {
             style={{ backgroundColor: viewedList.color || '#1a73e8' }}
           />
           <span className="max-w-[160px] truncate">{viewedList.name}</span>
-          <span className="flex items-center justify-center rounded-full p-1 text-[#5f6368] hover:bg-[#f1f3f4]">
+          <span className="flex items-center justify-center rounded-full p-1 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]">
             <X size={16} />
           </span>
         </button>
@@ -238,12 +251,12 @@ function App() {
         <button
           type="button"
           onClick={() => setTripLegs(null)}
-          className="absolute top-3 right-3 z-[1000] flex items-center gap-2 h-10 pl-4 pr-3 bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#202124] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
+          className="absolute top-3 right-3 z-[1000] flex items-center gap-2 h-10 pl-4 pr-3 bg-white dark:bg-[#2a2a2e] rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#202124] dark:text-[#e8eaed] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
           aria-label="Clear trip route"
         >
           <Route size={16} className="text-[#1a73e8]" />
           <span>Trip route</span>
-          <span className="flex items-center justify-center rounded-full p-1 text-[#5f6368] hover:bg-[#f1f3f4]">
+          <span className="flex items-center justify-center rounded-full p-1 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]">
             <X size={16} />
           </span>
         </button>
@@ -270,12 +283,12 @@ function App() {
         <button
           type="button"
           onClick={() => setAiStops(null)}
-          className="absolute top-3 right-3 z-[1000] flex items-center gap-2 h-10 pl-4 pr-3 bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#202124] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
+          className="absolute top-3 right-3 z-[1000] flex items-center gap-2 h-10 pl-4 pr-3 bg-white dark:bg-[#2a2a2e] rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#202124] dark:text-[#e8eaed] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
           aria-label="Clear AI itinerary pins"
         >
           <Sparkles size={16} className="text-[#7b1fa2]" />
           <span>AI itinerary</span>
-          <span className="flex items-center justify-center rounded-full p-1 text-[#5f6368] hover:bg-[#f1f3f4]">
+          <span className="flex items-center justify-center rounded-full p-1 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]">
             <X size={16} />
           </span>
         </button>
@@ -294,6 +307,7 @@ function App() {
         tripStops={tripStops}
         aiStops={aiStops}
         showCorridors={showCorridors}
+        theme={theme}
         onBboxChange={setBbox}
         isSaved={savedPlaces.isSaved}
         onToggleSaved={savedPlaces.toggleSaved}

@@ -199,6 +199,7 @@ interface MapViewProps {
   tripStops: SavedLocation[];
   aiStops: SavedLocation[] | null;
   showCorridors: boolean;
+  theme: 'light' | 'dark';
   onBboxChange: (bbox: Bbox) => void;
   isSaved: (id: string) => boolean;
   onToggleSaved: (place: SavedLocation) => void;
@@ -215,6 +216,7 @@ export default function MapView({
   tripStops,
   aiStops,
   showCorridors,
+  theme,
   onBboxChange,
   isSaved,
   onToggleSaved,
@@ -233,8 +235,13 @@ export default function MapView({
       <MapConstraints />
       <BoundsWatcher onChange={onBboxChange} />
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        key={theme}
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        url={
+          theme === 'dark'
+            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+        }
       />
       {showCorridors && <TransitCorridors />}
       <Marker position={position} icon={blueDotIcon}>
