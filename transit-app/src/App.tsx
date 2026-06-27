@@ -5,10 +5,11 @@ import CollectionPicker from './components/CollectionPicker';
 import Sidebar from './components/Sidebar';
 import TripPlanner from './components/TripPlanner';
 import MapView, { type Bbox } from './components/MapView';
+import ItineraryOptions from './components/ItineraryOptions';
 
 // Lazy-loaded so react-markdown only loads when the AI planner is opened.
 const AiTripPlanner = lazy(() => import('./components/AiTripPlanner'));
-import { planTransit, type OtpLeg } from './services/otp';
+import { planTransit, type OtpItinerary, type OtpLeg } from './services/otp';
 import { useSavedPlaces } from './hooks/useSavedPlaces';
 import { useCollections } from './hooks/useCollections';
 import { useLocationHistory } from './hooks/useLocationHistory';
@@ -16,12 +17,10 @@ import { useTheme } from './hooks/useTheme';
 import type { SearchViewport } from './hooks/usePlaceSearch';
 import type { PlaceCollection, SavedLocation, TripLeg } from './types/location';
 
-function formatDuration(seconds: number): string {
-  const mins = Math.round(seconds / 60);
-  if (mins < 60) return `${mins} min`;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m === 0 ? `${h} h` : `${h} h ${m} min`;
+// OTP often lists the direct walk first even when a transit trip is much
+// faster, so sort by duration to put the quickest option first.
+function rankItineraries(its: OtpItinerary[]): OtpItinerary[] {
+  return [...its].sort((a, b) => a.duration - b.duration);
 }
 
 function App() {
@@ -36,8 +35,8 @@ function App() {
   const [aiList, setAiList] = useState<PlaceCollection | null>(null);
   const [tripOpen, setTripOpen] = useState(false);
   const [tripLegs, setTripLegs] = useState<TripLeg[] | null>(null);
-  const [otpLegs, setOtpLegs] = useState<OtpLeg[] | null>(null);
-  const [otpDuration, setOtpDuration] = useState<number | null>(null);
+  const [routeOptions, setRouteOptions] = useState<OtpItinerary[] | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState(0);
   const [routing, setRouting] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [tripInitialLegs, setTripInitialLegs] = useState<TripLeg[] | null>(null);
@@ -76,8 +75,8 @@ function App() {
 
   const clearRoute = () => {
     setTripLegs(null);
-    setOtpLegs(null);
-    setOtpDuration(null);
+    setRouteOptions(null);
+    setSelectedRoute(0);
     setRouteError(null);
     setRouting(false);
   };
@@ -102,32 +101,59 @@ function App() {
     setViewedList(null);
     setAiStops(null);
     setTripLegs(legs);
-    setOtpLegs(null);
-    setOtpDuration(null);
+    setRouteOptions(null);
+    setSelectedRoute(0);
     setRouteError(null);
     setRouting(true);
 
+    const valid = legs.filter((leg) => leg.from && leg.to);
+
     try {
-      const collected: OtpLeg[] = [];
-      let total = 0;
-      for (const leg of legs) {
-        if (!leg.from || !leg.to) continue;
+      if (valid.length === 1) {
+        // Direct trip: surface the top itineraries so the user can choose
+        // between modes (e.g. skip the ferry, or prefer the bus over the train).
+        const leg = valid[0];
         const itineraries = await planTransit(
-          { lat: leg.from.lat, lon: leg.from.lon },
-          { lat: leg.to.lat, lon: leg.to.lon },
-          { numItineraries: 1 },
+          { lat: leg.from!.lat, lon: leg.from!.lon },
+          { lat: leg.to!.lat, lon: leg.to!.lon },
+          { numItineraries: 5 },
         );
-        const best = itineraries[0];
-        if (best) {
-          collected.push(...best.legs);
-          total += best.duration;
+        if (itineraries.length === 0) {
+          setRouteError('No transit route found.');
+        } else {
+          setRouteOptions(rankItineraries(itineraries).slice(0, 3));
+          setSelectedRoute(0);
         }
-      }
-      if (collected.length === 0) {
-        setRouteError('No transit route found.');
+      } else if (valid.length > 1) {
+        // Multi-leg trip: stitch the best option per leg into one route.
+        const combinedLegs: OtpLeg[] = [];
+        let duration = 0;
+        let walkDistance = 0;
+        let startTime = 0;
+        let endTime = 0;
+        for (const leg of valid) {
+          const itineraries = await planTransit(
+            { lat: leg.from!.lat, lon: leg.from!.lon },
+            { lat: leg.to!.lat, lon: leg.to!.lon },
+            { numItineraries: 5 },
+          );
+          const chosen = rankItineraries(itineraries)[0];
+          if (chosen) {
+            combinedLegs.push(...chosen.legs);
+            duration += chosen.duration;
+            walkDistance += chosen.walkDistance;
+            if (!startTime) startTime = chosen.startTime;
+            endTime = chosen.endTime;
+          }
+        }
+        if (combinedLegs.length === 0) {
+          setRouteError('No transit route found.');
+        } else {
+          setRouteOptions([{ duration, startTime, endTime, walkDistance, legs: combinedLegs }]);
+          setSelectedRoute(0);
+        }
       } else {
-        setOtpLegs(collected);
-        setOtpDuration(total);
+        setRouteError('Pick a start and destination.');
       }
     } catch (err) {
       setRouteError(err instanceof Error ? err.message : 'Routing failed.');
@@ -172,6 +198,9 @@ function App() {
     });
     return pts;
   }, [tripLegs]);
+
+  const selectedOption = routeOptions?.[selectedRoute] ?? null;
+  const otpLegs = selectedOption?.legs ?? null;
 
   if (error && !position) {
     return <div className="p-4 bg-red-100 text-red-700">{error}</div>;
@@ -300,7 +329,7 @@ function App() {
         </button>
       )}
 
-      {tripLegs && (
+      {tripLegs && !routeOptions && (
         <button
           type="button"
           onClick={clearRoute}
@@ -308,19 +337,20 @@ function App() {
           aria-label="Clear trip route"
         >
           <Route size={16} className={routeError ? 'text-[#d93025]' : 'text-[#1a73e8]'} />
-          <span>
-            {routing
-              ? 'Finding route…'
-              : routeError
-                ? routeError
-                : otpDuration != null
-                  ? `Trip route · ${formatDuration(otpDuration)}`
-                  : 'Trip route'}
-          </span>
+          <span>{routing ? 'Finding route…' : routeError ? routeError : 'Trip route'}</span>
           <span className="flex items-center justify-center rounded-full p-1 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]">
             <X size={16} />
           </span>
         </button>
+      )}
+
+      {routeOptions && (
+        <ItineraryOptions
+          options={routeOptions}
+          selected={selectedRoute}
+          onSelect={setSelectedRoute}
+          onClose={clearRoute}
+        />
       )}
 
       <Sidebar

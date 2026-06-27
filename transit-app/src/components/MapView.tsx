@@ -42,14 +42,28 @@ const MODE_COLOR: Record<string, string> = {
   GONDOLA: '#008522',
 };
 
-// Style a single OTP itinerary leg. Walking legs read as a dotted grey line;
-// transit legs use the GTFS route colour (falling back to a per-mode default).
+// Style a single OTP itinerary leg. Walking legs read as a dotted line; transit
+// legs use the GTFS route colour (falling back to a per-mode default).
 function otpLegStyle(leg: OtpLeg): L.PathOptions {
   if (leg.mode === 'WALK') {
-    return { color: '#5f6368', weight: 4, opacity: 0.9, dashArray: '1 8', lineCap: 'round' };
+    return { color: '#5f6368', weight: 4, opacity: 0.95, dashArray: '1 8', lineCap: 'round' };
   }
   const color = leg.route?.color ? `#${leg.route.color}` : MODE_COLOR[leg.mode] ?? '#1a73e8';
-  return { color, weight: 6, opacity: 0.9 };
+  return { color, weight: 6, opacity: 1 };
+}
+
+// A contrasting casing drawn beneath each leg so the active itinerary stands
+// out from the always-on corridor overlay it sits on top of (e.g. a SkyTrain
+// route over the same-coloured corridor line, or a SeaBus leg over the SeaBus
+// corridor). White in dark mode, black in light mode.
+function otpCasingStyle(leg: OtpLeg, theme: 'light' | 'dark'): L.PathOptions {
+  return {
+    color: theme === 'dark' ? '#ffffff' : '#000000',
+    weight: leg.mode === 'WALK' ? 7 : 10,
+    opacity: 0.9,
+    lineCap: 'round',
+    lineJoin: 'round',
+  };
 }
 
 // Fit the map to a set of raw [lat, lon] points (decoded OTP geometry).
@@ -337,28 +351,37 @@ export default function MapView({
       ))}
       {viewedList && viewedList.places.length > 0 && <FitBounds places={viewedList.places} />}
 
-      {otpLegs
-        ? otpLegs.map((leg, i) =>
+      {otpLegs ? (
+        <>
+          {/* Casings first so they sit beneath every coloured leg. */}
+          {otpLegs.map((leg, i) =>
+            leg.geometry.length > 1 ? (
+              <Polyline key={`case_${i}`} positions={leg.geometry} pathOptions={otpCasingStyle(leg, theme)} />
+            ) : null,
+          )}
+          {otpLegs.map((leg, i) =>
             leg.geometry.length > 1 ? (
               <Polyline key={`otp_${i}`} positions={leg.geometry} pathOptions={otpLegStyle(leg)} />
             ) : null,
-          )
-        : // Only fall back to straight lines once routing has finished without a
-          // result (no route / error). During routing we draw nothing so the
-          // straight line never flashes before the real geometry appears.
-          !routing &&
-          tripLegs?.map((leg) =>
-            leg.from && leg.to ? (
-              <Polyline
-                key={leg.id}
-                positions={[
-                  [leg.from.lat, leg.from.lon],
-                  [leg.to.lat, leg.to.lon],
-                ]}
-                pathOptions={{ color: '#1a73e8', weight: 4, opacity: 0.75, dashArray: '6 8' }}
-              />
-            ) : null,
           )}
+        </>
+      ) : // Only fall back to straight lines once routing has finished without a
+      // result (no route / error). During routing we draw nothing so the
+      // straight line never flashes before the real geometry appears.
+      !routing ? (
+        tripLegs?.map((leg) =>
+          leg.from && leg.to ? (
+            <Polyline
+              key={leg.id}
+              positions={[
+                [leg.from.lat, leg.from.lon],
+                [leg.to.lat, leg.to.lon],
+              ]}
+              pathOptions={{ color: '#1a73e8', weight: 4, opacity: 0.75, dashArray: '6 8' }}
+            />
+          ) : null,
+        )
+      ) : null}
       {otpPoints.length > 1 && <FitGeometry points={otpPoints} />}
       {tripStops.map((stop, i) => (
         <Marker key={`${stop.id}_${i}`} position={[stop.lat, stop.lon]} icon={numberedPinIcon(i + 1)}>
