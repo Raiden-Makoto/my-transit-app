@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import { Star, FolderPlus, Route } from 'lucide-react';
 import L from 'leaflet';
@@ -258,7 +258,13 @@ export default function MapView({
   onAddToList,
   onGetDirections,
 }: MapViewProps) {
-  const otpPoints: [number, number][] = otpLegs ? otpLegs.flatMap((leg) => leg.geometry) : [];
+  // Memoised so the reference is stable across unrelated re-renders (e.g. map
+  // pan/zoom updating the bbox); otherwise FitGeometry would refit on every
+  // render and prevent the user from zooming after a route is shown.
+  const otpPoints = useMemo<[number, number][]>(
+    () => (otpLegs ? otpLegs.flatMap((leg) => leg.geometry) : []),
+    [otpLegs],
+  );
   return (
     <MapContainer
       center={mapCenter}
@@ -337,7 +343,11 @@ export default function MapView({
               <Polyline key={`otp_${i}`} positions={leg.geometry} pathOptions={otpLegStyle(leg)} />
             ) : null,
           )
-        : tripLegs?.map((leg) =>
+        : // Only fall back to straight lines once routing has finished without a
+          // result (no route / error). During routing we draw nothing so the
+          // straight line never flashes before the real geometry appears.
+          !routing &&
+          tripLegs?.map((leg) =>
             leg.from && leg.to ? (
               <Polyline
                 key={leg.id}
@@ -345,7 +355,7 @@ export default function MapView({
                   [leg.from.lat, leg.from.lon],
                   [leg.to.lat, leg.to.lon],
                 ]}
-                pathOptions={{ color: '#1a73e8', weight: 4, opacity: routing ? 0.4 : 0.75, dashArray: '6 8' }}
+                pathOptions={{ color: '#1a73e8', weight: 4, opacity: 0.75, dashArray: '6 8' }}
               />
             ) : null,
           )}
