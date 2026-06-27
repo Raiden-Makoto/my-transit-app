@@ -18,6 +18,8 @@ const PORT = process.env.PORT || 8787;
 const HF_TOKEN = process.env.HF_TOKEN;
 const HF_MODEL = process.env.HF_MODEL || 'meta-llama/Llama-3.3-70B-Instruct';
 const HF_URL = 'https://router.huggingface.co/v1/chat/completions';
+// OTP Space base URL, e.g. https://<owner>-otpcommunicator.hf.space
+const OTP_URL = process.env.OTP_URL;
 
 // Transient HF statuses worth retrying (model loading, rate limit, gateway).
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
@@ -262,7 +264,154 @@ app.post('/api/plan-trip', async (req, res) => {
   }
 });
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, model: HF_MODEL, hasToken: Boolean(HF_TOKEN) }));
+// --- OpenTripPlanner transit routing -------------------------------------
+
+// Decode a Google-encoded polyline (precision 5) to [[lat, lon], ...].
+function decodePolyline(str) {
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  const coords = [];
+  while (index < str.length) {
+    let b;
+    let shift = 0;
+    let result = 0;
+    do {
+      b = str.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+    shift = 0;
+    result = 0;
+    do {
+      b = str.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lng += result & 1 ? ~(result >> 1) : result >> 1;
+    coords.push([lat / 1e5, lng / 1e5]);
+  }
+  return coords;
+}
+
+const OTP_PLAN_QUERY = `
+query Plan($from: InputCoordinates!, $to: InputCoordinates!, $date: String, $time: String, $arriveBy: Boolean, $numItineraries: Int) {
+  plan(
+    from: $from
+    to: $to
+    date: $date
+    time: $time
+    arriveBy: $arriveBy
+    numItineraries: $numItineraries
+    transportModes: [{ mode: TRANSIT }, { mode: WALK }]
+  ) {
+    itineraries {
+      duration
+      startTime
+      endTime
+      walkDistance
+      legs {
+        mode
+        duration
+        distance
+        startTime
+        endTime
+        from { name lat lon }
+        to { name lat lon }
+        route { shortName longName color textColor }
+        legGeometry { points }
+      }
+    }
+  }
+}`;
+
+app.post('/api/otp-plan', async (req, res) => {
+  if (!OTP_URL) {
+    return res.status(500).json({ error: 'Server is missing OTP_URL. Add it to transit-app/.env.local.' });
+  }
+
+  const { from, to, date, time, arriveBy, numItineraries } = req.body ?? {};
+  if (from?.lat == null || from?.lon == null || to?.lat == null || to?.lon == null) {
+    return res.status(400).json({ error: 'from and to coordinates are required.' });
+  }
+
+  const endpoint = `${OTP_URL.replace(/\/$/, '')}/otp/gtfs/v1`;
+  const headers = { 'Content-Type': 'application/json' };
+  // Private Spaces require an HF token with access; harmless for public ones.
+  if (HF_TOKEN) headers.Authorization = `Bearer ${HF_TOKEN}`;
+
+  try {
+    const otpRes = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        query: OTP_PLAN_QUERY,
+        variables: {
+          from: { lat: from.lat, lon: from.lon },
+          to: { lat: to.lat, lon: to.lon },
+          date: date ?? null,
+          time: time ?? null,
+          arriveBy: Boolean(arriveBy),
+          numItineraries: numItineraries ?? 3,
+        },
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+
+    const text = await otpRes.text();
+    if (!otpRes.ok) {
+      console.error(`[otp-plan] OTP HTTP ${otpRes.status} ${otpRes.statusText}:`, text.slice(0, 300));
+      return res.status(502).json({ error: `OTP request failed (${otpRes.status}).`, detail: text.slice(0, 300) });
+    }
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // A sleeping Space returns an HTML wake-up page rather than JSON.
+      return res.status(502).json({ error: 'OTP returned non-JSON (the Space may be waking up — try again).' });
+    }
+    if (data.errors) {
+      console.error('[otp-plan] OTP GraphQL errors:', JSON.stringify(data.errors).slice(0, 300));
+      return res.status(502).json({ error: 'OTP query error.', detail: data.errors });
+    }
+
+    const itineraries = (data?.data?.plan?.itineraries ?? []).map((it) => ({
+      duration: it.duration,
+      startTime: it.startTime,
+      endTime: it.endTime,
+      walkDistance: it.walkDistance,
+      legs: (it.legs ?? []).map((leg) => ({
+        mode: leg.mode,
+        duration: leg.duration,
+        distance: leg.distance,
+        startTime: leg.startTime,
+        endTime: leg.endTime,
+        from: leg.from,
+        to: leg.to,
+        route: leg.route
+          ? {
+              shortName: leg.route.shortName,
+              longName: leg.route.longName,
+              color: leg.route.color,
+              textColor: leg.route.textColor,
+            }
+          : null,
+        geometry: leg.legGeometry?.points ? decodePolyline(leg.legGeometry.points) : [],
+      })),
+    }));
+
+    res.json({ itineraries });
+  } catch (err) {
+    console.error('[otp-plan] failed to reach OTP:', err);
+    res.status(502).json({ error: 'Could not reach OTP.', detail: String(err) });
+  }
+});
+
+app.get('/api/health', (_req, res) =>
+  res.json({ ok: true, model: HF_MODEL, hasToken: Boolean(HF_TOKEN), otp: Boolean(OTP_URL) }),
+);
 
 app.listen(PORT, () => {
   console.log(`[trip-planner] API listening on http://localhost:${PORT} (model: ${HF_MODEL})`);
