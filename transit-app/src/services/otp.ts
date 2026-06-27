@@ -41,6 +41,33 @@ export interface PlanOptions {
   /** Treat time as the desired arrival time instead of departure. */
   arriveBy?: boolean;
   numItineraries?: number;
+  /** Allowed transit modes (OTP enum names, e.g. BUS, SUBWAY). WALK is always added. */
+  modes?: string[];
+}
+
+// User-facing transit-mode filters, mapped to OTP mode enums.
+export interface RoutePrefs {
+  bus: boolean;
+  skytrain: boolean;
+  seabus: boolean;
+  wce: boolean;
+}
+
+export const DEFAULT_ROUTE_PREFS: RoutePrefs = {
+  bus: true,
+  skytrain: true,
+  seabus: true,
+  wce: true,
+};
+
+/** Map the user's transit-mode toggles to OTP mode enum names. */
+export function prefsToModes(prefs: RoutePrefs): string[] {
+  const modes: string[] = [];
+  if (prefs.bus) modes.push('BUS');
+  if (prefs.skytrain) modes.push('SUBWAY');
+  if (prefs.seabus) modes.push('FERRY');
+  if (prefs.wce) modes.push('RAIL');
+  return modes;
 }
 
 /** Request transit itineraries between two coordinates from the OTP backend. */

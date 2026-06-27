@@ -9,7 +9,14 @@ import ItineraryOptions from './components/ItineraryOptions';
 
 // Lazy-loaded so react-markdown only loads when the AI planner is opened.
 const AiTripPlanner = lazy(() => import('./components/AiTripPlanner'));
-import { planTransit, type OtpItinerary, type OtpLeg } from './services/otp';
+import {
+  planTransit,
+  prefsToModes,
+  DEFAULT_ROUTE_PREFS,
+  type OtpItinerary,
+  type OtpLeg,
+  type RoutePrefs,
+} from './services/otp';
 import { useSavedPlaces } from './hooks/useSavedPlaces';
 import { useCollections } from './hooks/useCollections';
 import { useLocationHistory } from './hooks/useLocationHistory';
@@ -39,6 +46,7 @@ function App() {
   const [selectedRoute, setSelectedRoute] = useState(0);
   const [routing, setRouting] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
+  const [routePrefs, setRoutePrefs] = useState<RoutePrefs>(DEFAULT_ROUTE_PREFS);
   const [tripInitialLegs, setTripInitialLegs] = useState<TripLeg[] | null>(null);
   const [aiStops, setAiStops] = useState<SavedLocation[] | null>(null);
   const [showCorridors, setShowCorridors] = useState(true);
@@ -96,17 +104,14 @@ function App() {
     setViewedList(list);
   };
 
-  const handleShowRoute = async (legs: TripLeg[]) => {
-    setDestination(null);
-    setViewedList(null);
-    setAiStops(null);
-    setTripLegs(legs);
+  const runPlan = async (legs: TripLeg[], prefs: RoutePrefs) => {
     setRouteOptions(null);
     setSelectedRoute(0);
     setRouteError(null);
     setRouting(true);
 
     const valid = legs.filter((leg) => leg.from && leg.to);
+    const planOpts = { numItineraries: 5, modes: prefsToModes(prefs) };
 
     try {
       if (valid.length === 1) {
@@ -116,10 +121,10 @@ function App() {
         const itineraries = await planTransit(
           { lat: leg.from!.lat, lon: leg.from!.lon },
           { lat: leg.to!.lat, lon: leg.to!.lon },
-          { numItineraries: 5 },
+          planOpts,
         );
         if (itineraries.length === 0) {
-          setRouteError('No transit route found.');
+          setRouteError('No route found for these filters.');
         } else {
           setRouteOptions(rankItineraries(itineraries).slice(0, 3));
           setSelectedRoute(0);
@@ -135,7 +140,7 @@ function App() {
           const itineraries = await planTransit(
             { lat: leg.from!.lat, lon: leg.from!.lon },
             { lat: leg.to!.lat, lon: leg.to!.lon },
-            { numItineraries: 5 },
+            planOpts,
           );
           const chosen = rankItineraries(itineraries)[0];
           if (chosen) {
@@ -147,7 +152,7 @@ function App() {
           }
         }
         if (combinedLegs.length === 0) {
-          setRouteError('No transit route found.');
+          setRouteError('No route found for these filters.');
         } else {
           setRouteOptions([{ duration, startTime, endTime, walkDistance, legs: combinedLegs }]);
           setSelectedRoute(0);
@@ -160,6 +165,20 @@ function App() {
     } finally {
       setRouting(false);
     }
+  };
+
+  const handleShowRoute = (legs: TripLeg[]) => {
+    setDestination(null);
+    setViewedList(null);
+    setAiStops(null);
+    setTripLegs(legs);
+    void runPlan(legs, routePrefs);
+  };
+
+  // Re-run the current trip when the user changes mode/walking filters.
+  const handlePrefsChange = (next: RoutePrefs) => {
+    setRoutePrefs(next);
+    if (tripLegs) void runPlan(tripLegs, next);
   };
 
   const handleShowAiStops = (places: SavedLocation[]) => {
@@ -329,27 +348,16 @@ function App() {
         </button>
       )}
 
-      {tripLegs && !routeOptions && (
-        <button
-          type="button"
-          onClick={clearRoute}
-          className="absolute top-3 right-3 z-[1000] flex items-center gap-2 h-10 pl-4 pr-3 bg-white dark:bg-[#2a2a2e] rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#202124] dark:text-[#e8eaed] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
-          aria-label="Clear trip route"
-        >
-          <Route size={16} className={routeError ? 'text-[#d93025]' : 'text-[#1a73e8]'} />
-          <span>{routing ? 'Finding route…' : routeError ? routeError : 'Trip route'}</span>
-          <span className="flex items-center justify-center rounded-full p-1 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]">
-            <X size={16} />
-          </span>
-        </button>
-      )}
-
-      {routeOptions && (
+      {(routeOptions || routing || routeError) && tripLegs && (
         <ItineraryOptions
-          options={routeOptions}
+          options={routeOptions ?? []}
           selected={selectedRoute}
           onSelect={setSelectedRoute}
           onClose={clearRoute}
+          prefs={routePrefs}
+          onPrefsChange={handlePrefsChange}
+          loading={routing}
+          error={routeError}
         />
       )}
 

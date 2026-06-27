@@ -1,12 +1,12 @@
 import { Footprints, Bus, TrainFront, TramFront, Ship, CableCar, ChevronRight, X } from 'lucide-react';
 import type { ComponentType } from 'react';
-import type { OtpItinerary, OtpLeg } from '../services/otp';
+import type { OtpItinerary, OtpLeg, RoutePrefs } from '../services/otp';
 
 const MODE_ICON: Record<string, ComponentType<{ size?: number }>> = {
   WALK: Footprints,
   BUS: Bus,
   SUBWAY: TrainFront,
-  RAIL: TrainFront,
+  RAIL: TramFront,
   TRAM: TramFront,
   FERRY: Ship,
   GONDOLA: CableCar,
@@ -20,6 +20,14 @@ const MODE_COLOR: Record<string, string> = {
   FERRY: '#746661',
   GONDOLA: '#008522',
 };
+
+// Transit-mode filter chips, in display order.
+const MODE_FILTERS: { key: keyof RoutePrefs; label: string; Icon: ComponentType<{ size?: number }> }[] = [
+  { key: 'bus', label: 'Bus', Icon: Bus },
+  { key: 'skytrain', label: 'SkyTrain', Icon: TrainFront },
+  { key: 'seabus', label: 'SeaBus', Icon: Ship },
+  { key: 'wce', label: 'WCE', Icon: TramFront },
+];
 
 function fmtDuration(seconds: number): string {
   const mins = Math.round(seconds / 60);
@@ -64,20 +72,63 @@ function LegChip({ leg }: { leg: OtpLeg }) {
   );
 }
 
+function FilterChip({
+  active,
+  label,
+  Icon,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  Icon: ComponentType<{ size?: number }>;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium border transition-colors ${
+        active
+          ? 'bg-[#1a73e8] border-[#1a73e8] text-white'
+          : 'bg-transparent border-[#dadce0] dark:border-[#5f6368] text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]'
+      }`}
+    >
+      <Icon size={14} />
+      {label}
+    </button>
+  );
+}
+
 interface ItineraryOptionsProps {
   options: OtpItinerary[];
   selected: number;
   onSelect: (index: number) => void;
   onClose: () => void;
+  prefs: RoutePrefs;
+  onPrefsChange: (next: RoutePrefs) => void;
+  loading: boolean;
+  error: string | null;
 }
 
-export default function ItineraryOptions({ options, selected, onSelect, onClose }: ItineraryOptionsProps) {
+export default function ItineraryOptions({
+  options,
+  selected,
+  onSelect,
+  onClose,
+  prefs,
+  onPrefsChange,
+  loading,
+  error,
+}: ItineraryOptionsProps) {
+  const toggle = (key: keyof RoutePrefs) => onPrefsChange({ ...prefs, [key]: !prefs[key] });
+
   return (
     <div className="absolute top-[64px] left-[80px] z-[1000] w-[min(calc(92vw-80px),400px)] font-sans">
       <div className="bg-white dark:bg-[#2a2a2e] rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] overflow-hidden">
         <div className="flex items-center justify-between px-3 py-2 border-b border-[#e8eaed] dark:border-[#3a3a3e]">
           <span className="text-[12px] font-semibold uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6]">
-            {options.length > 1 ? `${options.length} routes` : 'Route'}
+            {loading ? 'Finding routes…' : options.length > 1 ? `${options.length} routes` : 'Route'}
           </span>
           <button
             type="button"
@@ -88,42 +139,55 @@ export default function ItineraryOptions({ options, selected, onSelect, onClose 
             <X size={16} />
           </button>
         </div>
-        <ul className="max-h-[50vh] overflow-y-auto">
-          {options.map((opt, i) => {
-            const isSelected = i === selected;
-            return (
-              <li key={i}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(i)}
-                  aria-pressed={isSelected}
-                  className={`w-full text-left px-3 py-2.5 border-l-[3px] transition-colors ${
-                    isSelected
-                      ? 'border-[#1a73e8] bg-[#e8f0fe] dark:bg-[#1a3a5c]'
-                      : 'border-transparent hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]'
-                  }`}
-                >
-                  <div className="flex items-baseline justify-between mb-1.5">
-                    <span className="text-[16px] font-semibold text-[#202124] dark:text-[#e8eaed]">
-                      {fmtDuration(opt.duration)}
-                    </span>
-                    <span className="text-[11px] text-[#5f6368] dark:text-[#9aa0a6]">
-                      {fmtTime(opt.startTime)} – {fmtTime(opt.endTime)} · {fmtWalk(opt.walkDistance)} walk
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1 flex-wrap">
-                    {opt.legs.map((leg, j) => (
-                      <span key={j} className="inline-flex items-center gap-1">
-                        {j > 0 && <ChevronRight size={12} className="text-[#bdc1c6] dark:text-[#5f6368]" />}
-                        <LegChip leg={leg} />
+
+        <div className="flex flex-wrap gap-1.5 px-3 py-2 border-b border-[#e8eaed] dark:border-[#3a3a3e]">
+          {MODE_FILTERS.map(({ key, label, Icon }) => (
+            <FilterChip key={key} active={prefs[key]} label={label} Icon={Icon} onClick={() => toggle(key)} />
+          ))}
+        </div>
+
+        {error ? (
+          <div className="px-3 py-4 text-[13px] text-[#d93025]">{error}</div>
+        ) : loading && options.length === 0 ? (
+          <div className="px-3 py-4 text-[13px] text-[#5f6368] dark:text-[#9aa0a6]">Searching for routes…</div>
+        ) : (
+          <ul className="max-h-[50vh] overflow-y-auto">
+            {options.map((opt, i) => {
+              const isSelected = i === selected;
+              return (
+                <li key={i}>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(i)}
+                    aria-pressed={isSelected}
+                    className={`w-full text-left px-3 py-2.5 border-l-[3px] transition-colors ${
+                      isSelected
+                        ? 'border-[#1a73e8] bg-[#e8f0fe] dark:bg-[#1a3a5c]'
+                        : 'border-transparent hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]'
+                    }`}
+                  >
+                    <div className="flex items-baseline justify-between mb-1.5">
+                      <span className="text-[16px] font-semibold text-[#202124] dark:text-[#e8eaed]">
+                        {fmtDuration(opt.duration)}
                       </span>
-                    ))}
-                  </div>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+                      <span className="text-[11px] text-[#5f6368] dark:text-[#9aa0a6]">
+                        {fmtTime(opt.startTime)} – {fmtTime(opt.endTime)} · {fmtWalk(opt.walkDistance)} walk
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {opt.legs.map((leg, j) => (
+                        <span key={j} className="inline-flex items-center gap-1">
+                          {j > 0 && <ChevronRight size={12} className="text-[#bdc1c6] dark:text-[#5f6368]" />}
+                          <LegChip leg={leg} />
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
     </div>
   );

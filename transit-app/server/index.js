@@ -295,7 +295,22 @@ function decodePolyline(str) {
   return coords;
 }
 
-const OTP_PLAN_QUERY = `
+// OTP mode enums we allow clients to request (plus WALK, always permitted).
+const ALLOWED_TRANSIT_MODES = new Set(['BUS', 'SUBWAY', 'RAIL', 'TRAM', 'FERRY', 'GONDOLA', 'TRANSIT']);
+
+// Build the inline transportModes list. WALK is always included for
+// access/egress legs. An absent `modes` field defaults to all transit; an
+// explicit (possibly empty) array is respected, so deselecting every transit
+// mode yields walking-only directions.
+function buildTransportModes(modes) {
+  if (!Array.isArray(modes)) return '{ mode: WALK }, { mode: TRANSIT }';
+  const requested = modes.filter((m) => ALLOWED_TRANSIT_MODES.has(m));
+  const all = ['WALK', ...requested];
+  return all.map((m) => `{ mode: ${m} }`).join(', ');
+}
+
+function buildPlanQuery(transportModesInline) {
+  return `
 query Plan($from: InputCoordinates!, $to: InputCoordinates!, $date: String, $time: String, $arriveBy: Boolean, $numItineraries: Int) {
   plan(
     from: $from
@@ -304,7 +319,7 @@ query Plan($from: InputCoordinates!, $to: InputCoordinates!, $date: String, $tim
     time: $time
     arriveBy: $arriveBy
     numItineraries: $numItineraries
-    transportModes: [{ mode: TRANSIT }, { mode: WALK }]
+    transportModes: [${transportModesInline}]
   ) {
     itineraries {
       duration
@@ -325,13 +340,14 @@ query Plan($from: InputCoordinates!, $to: InputCoordinates!, $date: String, $tim
     }
   }
 }`;
+}
 
 app.post('/api/otp-plan', async (req, res) => {
   if (!OTP_URL) {
     return res.status(500).json({ error: 'Server is missing OTP_URL. Add it to transit-app/.env.local.' });
   }
 
-  const { from, to, date, time, arriveBy, numItineraries } = req.body ?? {};
+  const { from, to, date, time, arriveBy, numItineraries, modes } = req.body ?? {};
   if (from?.lat == null || from?.lon == null || to?.lat == null || to?.lon == null) {
     return res.status(400).json({ error: 'from and to coordinates are required.' });
   }
@@ -341,12 +357,14 @@ app.post('/api/otp-plan', async (req, res) => {
   // Private Spaces require an HF token with access; harmless for public ones.
   if (HF_TOKEN) headers.Authorization = `Bearer ${HF_TOKEN}`;
 
+  const query = buildPlanQuery(buildTransportModes(modes));
+
   try {
     const otpRes = await fetch(endpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        query: OTP_PLAN_QUERY,
+        query,
         variables: {
           from: { lat: from.lat, lon: from.lon },
           to: { lat: to.lat, lon: to.lon },
