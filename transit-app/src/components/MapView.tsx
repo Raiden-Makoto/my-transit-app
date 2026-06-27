@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents 
 import { Star, FolderPlus, Route } from 'lucide-react';
 import L from 'leaflet';
 import type { PlaceCollection, SavedLocation, TripLeg } from '../types/location';
+import type { OtpLeg } from '../services/otp';
 import rapidTransit from '../data/rapidTransit.json';
 
 export type Bbox = [number, number, number, number];
@@ -29,6 +30,36 @@ const CORRIDOR_STYLE: Record<CorridorMode, L.PathOptions> = {
 // metro-wide view) and let them grow toward full weight as you zoom in.
 function zoomWeightFactor(zoom: number) {
   return Math.max(0.4, Math.min(1.2, 0.4 + (zoom - 10) * 0.13));
+}
+
+// Fallback colours per OTP mode when the GTFS route has no colour assigned.
+const MODE_COLOR: Record<string, string> = {
+  BUS: '#1a73e8',
+  SUBWAY: '#0033a0',
+  RAIL: '#87189d',
+  TRAM: '#008522',
+  FERRY: '#746661',
+  GONDOLA: '#008522',
+};
+
+// Style a single OTP itinerary leg. Walking legs read as a dotted grey line;
+// transit legs use the GTFS route colour (falling back to a per-mode default).
+function otpLegStyle(leg: OtpLeg): L.PathOptions {
+  if (leg.mode === 'WALK') {
+    return { color: '#5f6368', weight: 4, opacity: 0.9, dashArray: '1 8', lineCap: 'round' };
+  }
+  const color = leg.route?.color ? `#${leg.route.color}` : MODE_COLOR[leg.mode] ?? '#1a73e8';
+  return { color, weight: 6, opacity: 0.9 };
+}
+
+// Fit the map to a set of raw [lat, lon] points (decoded OTP geometry).
+function FitGeometry({ points }: { points: [number, number][] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (points.length === 0) return;
+    map.fitBounds(L.latLngBounds(points), { padding: [60, 60], maxZoom: 16 });
+  }, [points, map]);
+  return null;
 }
 
 function TransitCorridors() {
@@ -197,6 +228,8 @@ interface MapViewProps {
   viewedList: PlaceCollection | null;
   tripLegs: TripLeg[] | null;
   tripStops: SavedLocation[];
+  otpLegs: OtpLeg[] | null;
+  routing: boolean;
   aiStops: SavedLocation[] | null;
   showCorridors: boolean;
   theme: 'light' | 'dark';
@@ -214,6 +247,8 @@ export default function MapView({
   viewedList,
   tripLegs,
   tripStops,
+  otpLegs,
+  routing,
   aiStops,
   showCorridors,
   theme,
@@ -223,6 +258,7 @@ export default function MapView({
   onAddToList,
   onGetDirections,
 }: MapViewProps) {
+  const otpPoints: [number, number][] = otpLegs ? otpLegs.flatMap((leg) => leg.geometry) : [];
   return (
     <MapContainer
       center={mapCenter}
@@ -295,18 +331,25 @@ export default function MapView({
       ))}
       {viewedList && viewedList.places.length > 0 && <FitBounds places={viewedList.places} />}
 
-      {tripLegs?.map((leg) =>
-        leg.from && leg.to ? (
-          <Polyline
-            key={leg.id}
-            positions={[
-              [leg.from.lat, leg.from.lon],
-              [leg.to.lat, leg.to.lon],
-            ]}
-            pathOptions={{ color: '#1a73e8', weight: 4, opacity: 0.75 }}
-          />
-        ) : null,
-      )}
+      {otpLegs
+        ? otpLegs.map((leg, i) =>
+            leg.geometry.length > 1 ? (
+              <Polyline key={`otp_${i}`} positions={leg.geometry} pathOptions={otpLegStyle(leg)} />
+            ) : null,
+          )
+        : tripLegs?.map((leg) =>
+            leg.from && leg.to ? (
+              <Polyline
+                key={leg.id}
+                positions={[
+                  [leg.from.lat, leg.from.lon],
+                  [leg.to.lat, leg.to.lon],
+                ]}
+                pathOptions={{ color: '#1a73e8', weight: 4, opacity: routing ? 0.4 : 0.75, dashArray: '6 8' }}
+              />
+            ) : null,
+          )}
+      {otpPoints.length > 1 && <FitGeometry points={otpPoints} />}
       {tripStops.map((stop, i) => (
         <Marker key={`${stop.id}_${i}`} position={[stop.lat, stop.lon]} icon={numberedPinIcon(i + 1)}>
           <Popup>
@@ -320,7 +363,7 @@ export default function MapView({
           </Popup>
         </Marker>
       ))}
-      {tripStops.length > 0 && <FitBounds places={tripStops} />}
+      {otpPoints.length === 0 && tripStops.length > 0 && <FitBounds places={tripStops} />}
 
       {aiStops?.map((stop, i) => (
         <Marker key={`ai_${stop.id}_${i}`} position={[stop.lat, stop.lon]} icon={numberedPinIcon(i + 1)}>

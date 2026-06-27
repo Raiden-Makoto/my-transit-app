@@ -8,12 +8,21 @@ import MapView, { type Bbox } from './components/MapView';
 
 // Lazy-loaded so react-markdown only loads when the AI planner is opened.
 const AiTripPlanner = lazy(() => import('./components/AiTripPlanner'));
+import { planTransit, type OtpLeg } from './services/otp';
 import { useSavedPlaces } from './hooks/useSavedPlaces';
 import { useCollections } from './hooks/useCollections';
 import { useLocationHistory } from './hooks/useLocationHistory';
 import { useTheme } from './hooks/useTheme';
 import type { SearchViewport } from './hooks/usePlaceSearch';
 import type { PlaceCollection, SavedLocation, TripLeg } from './types/location';
+
+function formatDuration(seconds: number): string {
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h} h` : `${h} h ${m} min`;
+}
 
 function App() {
   const [position, setPosition] = useState<[number, number] | null>(null);
@@ -27,6 +36,10 @@ function App() {
   const [aiList, setAiList] = useState<PlaceCollection | null>(null);
   const [tripOpen, setTripOpen] = useState(false);
   const [tripLegs, setTripLegs] = useState<TripLeg[] | null>(null);
+  const [otpLegs, setOtpLegs] = useState<OtpLeg[] | null>(null);
+  const [otpDuration, setOtpDuration] = useState<number | null>(null);
+  const [routing, setRouting] = useState(false);
+  const [routeError, setRouteError] = useState<string | null>(null);
   const [tripInitialLegs, setTripInitialLegs] = useState<TripLeg[] | null>(null);
   const [aiStops, setAiStops] = useState<SavedLocation[] | null>(null);
   const [showCorridors, setShowCorridors] = useState(true);
@@ -61,32 +74,72 @@ function App() {
     );
   }, []);
 
+  const clearRoute = () => {
+    setTripLegs(null);
+    setOtpLegs(null);
+    setOtpDuration(null);
+    setRouteError(null);
+    setRouting(false);
+  };
+
   const handleLocationSelect = (location: SavedLocation) => {
     setMapCenter([location.lat, location.lon]);
     setDestination(location);
     setViewedList(null);
-    setTripLegs(null);
+    clearRoute();
     setAiStops(null);
   };
 
   const handleViewList = (list: PlaceCollection) => {
     setDestination(null);
-    setTripLegs(null);
+    clearRoute();
     setAiStops(null);
     setViewedList(list);
   };
 
-  const handleShowRoute = (legs: TripLeg[]) => {
+  const handleShowRoute = async (legs: TripLeg[]) => {
     setDestination(null);
     setViewedList(null);
     setAiStops(null);
     setTripLegs(legs);
+    setOtpLegs(null);
+    setOtpDuration(null);
+    setRouteError(null);
+    setRouting(true);
+
+    try {
+      const collected: OtpLeg[] = [];
+      let total = 0;
+      for (const leg of legs) {
+        if (!leg.from || !leg.to) continue;
+        const itineraries = await planTransit(
+          { lat: leg.from.lat, lon: leg.from.lon },
+          { lat: leg.to.lat, lon: leg.to.lon },
+          { numItineraries: 1 },
+        );
+        const best = itineraries[0];
+        if (best) {
+          collected.push(...best.legs);
+          total += best.duration;
+        }
+      }
+      if (collected.length === 0) {
+        setRouteError('No transit route found.');
+      } else {
+        setOtpLegs(collected);
+        setOtpDuration(total);
+      }
+    } catch (err) {
+      setRouteError(err instanceof Error ? err.message : 'Routing failed.');
+    } finally {
+      setRouting(false);
+    }
   };
 
   const handleShowAiStops = (places: SavedLocation[]) => {
     setDestination(null);
     setViewedList(null);
-    setTripLegs(null);
+    clearRoute();
     setAiStops(places);
     setAiList(null);
   };
@@ -250,12 +303,20 @@ function App() {
       {tripLegs && (
         <button
           type="button"
-          onClick={() => setTripLegs(null)}
+          onClick={clearRoute}
           className="absolute top-3 right-3 z-[1000] flex items-center gap-2 h-10 pl-4 pr-3 bg-white dark:bg-[#2a2a2e] rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#202124] dark:text-[#e8eaed] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
           aria-label="Clear trip route"
         >
-          <Route size={16} className="text-[#1a73e8]" />
-          <span>Trip route</span>
+          <Route size={16} className={routeError ? 'text-[#d93025]' : 'text-[#1a73e8]'} />
+          <span>
+            {routing
+              ? 'Finding route…'
+              : routeError
+                ? routeError
+                : otpDuration != null
+                  ? `Trip route · ${formatDuration(otpDuration)}`
+                  : 'Trip route'}
+          </span>
           <span className="flex items-center justify-center rounded-full p-1 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]">
             <X size={16} />
           </span>
@@ -305,6 +366,8 @@ function App() {
         viewedList={viewedList}
         tripLegs={tripLegs}
         tripStops={tripStops}
+        otpLegs={otpLegs}
+        routing={routing}
         aiStops={aiStops}
         showCorridors={showCorridors}
         theme={theme}
