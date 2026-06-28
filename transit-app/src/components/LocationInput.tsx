@@ -30,8 +30,8 @@ export default function LocationInput({ value, onChange, placeholder, viewport, 
 
   return (
     <div className="relative">
-      <div className="flex items-center h-10 px-3 bg-[#f1f3f4] rounded-lg focus-within:bg-white focus-within:ring-2 focus-within:ring-[#1a73e8]">
-        <span className="mr-2 shrink-0 text-[#5f6368]">{leadingIcon ?? <MapPin size={18} />}</span>
+      <div className="flex items-center h-10 px-3 bg-[#f1f3f4] dark:bg-[#3a3a3e] rounded-lg focus-within:bg-white dark:focus-within:bg-[#2a2a2e] focus-within:ring-2 focus-within:ring-[#1a73e8]">
+        <span className="mr-2 shrink-0 text-[#5f6368] dark:text-[#9aa0a6]">{leadingIcon ?? <MapPin size={18} />}</span>
         <input
           type="text"
           value={query}
@@ -42,7 +42,7 @@ export default function LocationInput({ value, onChange, placeholder, viewport, 
           onFocus={() => setFocused(true)}
           onBlur={() => window.setTimeout(() => setFocused(false), 150)}
           placeholder={placeholder ?? 'Choose location'}
-          className="flex-1 min-w-0 bg-transparent outline-none text-[14px] text-[#202124] placeholder:text-[#5f6368]"
+          className="flex-1 min-w-0 bg-transparent outline-none text-[14px] text-[#202124] dark:text-[#e8eaed] placeholder:text-[#5f6368] dark:placeholder:text-[#9aa0a6]"
         />
         {query && (
           <button
@@ -52,7 +52,7 @@ export default function LocationInput({ value, onChange, placeholder, viewport, 
               setQuery('');
               onChange(null);
             }}
-            className="ml-1 shrink-0 rounded-full p-1 text-[#5f6368] hover:bg-[#e0e0e0]"
+            className="ml-1 shrink-0 rounded-full p-1 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#e0e0e0] dark:hover:bg-[#4a4a4e]"
             aria-label="Clear"
           >
             <X size={16} />
@@ -61,9 +61,9 @@ export default function LocationInput({ value, onChange, placeholder, viewport, 
       </div>
 
       {showResults && (
-        <div className="absolute left-0 right-0 top-[44px] z-10 bg-white rounded-lg shadow-[0_2px_10px_rgba(0,0,0,0.25)] overflow-hidden py-1">
+        <div className="absolute left-0 right-0 top-[44px] z-10 bg-white dark:bg-[#2a2a2e] rounded-lg shadow-[0_2px_10px_rgba(0,0,0,0.25)] overflow-hidden py-1">
           {loading && (
-            <div className="flex items-center gap-2 px-3 py-2 text-[13px] text-[#5f6368]">
+            <div className="flex items-center gap-2 px-3 py-2 text-[13px] text-[#5f6368] dark:text-[#9aa0a6]">
               <Loader2 size={16} className="animate-spin" />
               Searching...
             </div>
@@ -75,13 +75,13 @@ export default function LocationInput({ value, onChange, placeholder, viewport, 
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => select(place)}
-                className="flex w-full items-center px-3 py-2 text-left transition-colors hover:bg-[#f5f5f5]"
+                className="flex w-full items-center px-3 py-2 text-left transition-colors hover:bg-[#f5f5f5] dark:hover:bg-[#3a3a3e]"
               >
-                <MapPin size={16} className="mr-3 shrink-0 text-[#5f6368]" />
+                <MapPin size={16} className="mr-3 shrink-0 text-[#5f6368] dark:text-[#9aa0a6]" />
                 <span className="flex-1 min-w-0">
-                  <span className="block text-[14px] text-[#202124] truncate">{place.primaryText}</span>
+                  <span className="block text-[14px] text-[#202124] dark:text-[#e8eaed] truncate">{place.primaryText}</span>
                   {place.secondaryText && (
-                    <span className="block text-[12px] text-[#5f6368] truncate">{place.secondaryText}</span>
+                    <span className="block text-[12px] text-[#5f6368] dark:text-[#9aa0a6] truncate">{place.secondaryText}</span>
                   )}
                 </span>
               </button>

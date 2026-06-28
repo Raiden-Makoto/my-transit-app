@@ -19,6 +19,8 @@ export interface OtpLeg {
   distance: number; // meters
   startTime: number; // epoch ms
   endTime: number; // epoch ms
+  headsign?: string | null; // transit destination sign, e.g. "99 B-Line/To UBC"
+  numStops?: number | null; // stops travelled on a transit leg
   from: OtpPlace;
   to: OtpPlace;
   route: OtpRoute | null;

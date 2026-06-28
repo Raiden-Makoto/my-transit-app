@@ -332,9 +332,11 @@ query Plan($from: InputCoordinates!, $to: InputCoordinates!, $date: String, $tim
         distance
         startTime
         endTime
+        headsign
         from { name lat lon }
         to { name lat lon }
         route { shortName longName color textColor }
+        intermediateStops { name }
         legGeometry { points }
       }
     }
@@ -406,6 +408,9 @@ app.post('/api/otp-plan', async (req, res) => {
         distance: leg.distance,
         startTime: leg.startTime,
         endTime: leg.endTime,
+        headsign: leg.headsign ?? null,
+        // Stops travelled on this leg = intermediate stops + the alighting stop.
+        numStops: Array.isArray(leg.intermediateStops) ? leg.intermediateStops.length + 1 : null,
         from: leg.from,
         to: leg.to,
         route: leg.route

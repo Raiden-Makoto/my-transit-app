@@ -3,7 +3,7 @@ import { Menu, X, Route, Sparkles, TrainFront, Sun, Moon } from 'lucide-react';
 import SearchBox from './components/SearchBox';
 import CollectionPicker from './components/CollectionPicker';
 import Sidebar from './components/Sidebar';
-import TripPlanner from './components/TripPlanner';
+import TripPlanner, { type TripTiming } from './components/TripPlanner';
 import MapView, { type Bbox } from './components/MapView';
 import ItineraryOptions from './components/ItineraryOptions';
 
@@ -47,6 +47,7 @@ function App() {
   const [routing, setRouting] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routePrefs, setRoutePrefs] = useState<RoutePrefs>(DEFAULT_ROUTE_PREFS);
+  const [routeTiming, setRouteTiming] = useState<TripTiming | undefined>(undefined);
   const [tripInitialLegs, setTripInitialLegs] = useState<TripLeg[] | null>(null);
   const [aiStops, setAiStops] = useState<SavedLocation[] | null>(null);
   const [showCorridors, setShowCorridors] = useState(true);
@@ -87,6 +88,7 @@ function App() {
     setSelectedRoute(0);
     setRouteError(null);
     setRouting(false);
+    setRouteTiming(undefined);
   };
 
   const handleLocationSelect = (location: SavedLocation) => {
@@ -104,14 +106,14 @@ function App() {
     setViewedList(list);
   };
 
-  const runPlan = async (legs: TripLeg[], prefs: RoutePrefs) => {
+  const runPlan = async (legs: TripLeg[], prefs: RoutePrefs, timing?: TripTiming) => {
     setRouteOptions(null);
     setSelectedRoute(0);
     setRouteError(null);
     setRouting(true);
 
     const valid = legs.filter((leg) => leg.from && leg.to);
-    const planOpts = { numItineraries: 5, modes: prefsToModes(prefs) };
+    const planOpts = { numItineraries: 8, modes: prefsToModes(prefs), ...(timing ?? {}) };
 
     try {
       if (valid.length === 1) {
@@ -126,7 +128,7 @@ function App() {
         if (itineraries.length === 0) {
           setRouteError('No route found for these filters.');
         } else {
-          setRouteOptions(rankItineraries(itineraries).slice(0, 3));
+          setRouteOptions(rankItineraries(itineraries).slice(0, 5));
           setSelectedRoute(0);
         }
       } else if (valid.length > 1) {
@@ -167,18 +169,19 @@ function App() {
     }
   };
 
-  const handleShowRoute = (legs: TripLeg[]) => {
+  const handleShowRoute = (legs: TripLeg[], timing?: TripTiming) => {
     setDestination(null);
     setViewedList(null);
     setAiStops(null);
     setTripLegs(legs);
-    void runPlan(legs, routePrefs);
+    setRouteTiming(timing);
+    void runPlan(legs, routePrefs, timing);
   };
 
-  // Re-run the current trip when the user changes mode/walking filters.
+  // Re-run the current trip when the user changes mode filters.
   const handlePrefsChange = (next: RoutePrefs) => {
     setRoutePrefs(next);
-    if (tripLegs) void runPlan(tripLegs, next);
+    if (tripLegs) void runPlan(tripLegs, next, routeTiming);
   };
 
   const handleShowAiStops = (places: SavedLocation[]) => {
