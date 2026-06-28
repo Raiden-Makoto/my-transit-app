@@ -97,6 +97,10 @@ export default function TripPlanner({ open, onClose, viewport, onShowRoute, init
       const last = prev[prev.length - 1];
       const next = makeLeg();
       if (last?.to) next.from = last.to;
+      // Only leg 1 can "leave now"; later legs default to leaving at/after the
+      // previous leg's time.
+      next.whenMode = 'leave';
+      next.whenValue = toLocalInput(new Date(Math.max(Date.now(), legTimeMs(last))));
       return [...prev, next];
     });
   };
@@ -165,7 +169,7 @@ export default function TripPlanner({ open, onClose, viewport, onShowRoute, init
                 />
 
                 <div className="flex rounded-lg bg-[#f1f3f4] dark:bg-[#3a3a3e] p-0.5 text-[12px] font-medium">
-                  {WHEN_OPTIONS.map(({ mode, label }) => (
+                  {(i === 0 ? WHEN_OPTIONS : WHEN_OPTIONS.filter((o) => o.mode !== 'now')).map(({ mode, label }) => (
                     <button
                       key={mode}
                       type="button"
