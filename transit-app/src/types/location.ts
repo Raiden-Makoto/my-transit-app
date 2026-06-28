@@ -14,8 +14,14 @@ export interface PlaceCollection {
     places: SavedLocation[];
   }
 
+export type TripWhenMode = 'now' | 'leave' | 'arrive';
+
 export interface TripLeg {
     id: string;
     from: SavedLocation | null;
     to: SavedLocation | null;
+    /** When this leg should depart/arrive; defaults to "now". */
+    whenMode?: TripWhenMode;
+    /** datetime-local value ("YYYY-MM-DDTHH:mm") for leave-at / arrive-by. */
+    whenValue?: string;
   }
