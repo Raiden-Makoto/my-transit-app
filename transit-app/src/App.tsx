@@ -420,18 +420,18 @@ function App() {
       {toast && (
         <div
           role="status"
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1300] flex items-center gap-2.5 max-w-[90vw] rounded-lg px-4 py-2.5 shadow-[0_2px_10px_rgba(0,0,0,0.3)] font-sans text-[14px] bg-[#202124] text-white dark:bg-[#e8eaed] dark:text-[#202124]"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1300] flex items-center gap-2.5 max-w-[90vw] rounded-lg px-4 py-2.5 shadow-[0_2px_10px_rgba(0,0,0,0.3)] font-sans text-[14px] bg-white text-[#202124] dark:bg-[#2a2a2e] dark:text-[#e8eaed]"
         >
           {toast.tone === 'info' ? (
-            <Loader2 size={16} className="shrink-0 animate-spin" />
+            <Loader2 size={16} className="shrink-0 animate-spin text-[#1a73e8]" />
           ) : (
-            <span className="shrink-0 w-2 h-2 rounded-full bg-[#f28b82]" />
+            <span className="shrink-0 w-2 h-2 rounded-full bg-[#d93025]" />
           )}
           <span>{toast.message}</span>
           <button
             type="button"
             onClick={() => setToast(null)}
-            className="ml-1 shrink-0 rounded-full p-1 hover:bg-white/15 dark:hover:bg-black/10"
+            className="ml-1 shrink-0 rounded-full p-1 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]"
             aria-label="Dismiss"
           >
             <X size={15} />
