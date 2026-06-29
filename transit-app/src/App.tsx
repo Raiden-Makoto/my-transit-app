@@ -14,6 +14,7 @@ import {
   planTransit,
   prefsToModes,
   DEFAULT_ROUTE_PREFS,
+  type LegPlan,
   type OtpItinerary,
   type OtpLeg,
   type RoutePrefs,
@@ -43,8 +44,8 @@ function App() {
   const [aiList, setAiList] = useState<PlaceCollection | null>(null);
   const [tripOpen, setTripOpen] = useState(false);
   const [tripLegs, setTripLegs] = useState<TripLeg[] | null>(null);
-  const [routeOptions, setRouteOptions] = useState<OtpItinerary[] | null>(null);
-  const [selectedRoute, setSelectedRoute] = useState(0);
+  const [legPlans, setLegPlans] = useState<LegPlan[] | null>(null);
+  const [activeLeg, setActiveLeg] = useState(0);
   const [routing, setRouting] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routePrefs, setRoutePrefs] = useState<RoutePrefs>(DEFAULT_ROUTE_PREFS);
@@ -85,8 +86,8 @@ function App() {
 
   const clearRoute = () => {
     setTripLegs(null);
-    setRouteOptions(null);
-    setSelectedRoute(0);
+    setLegPlans(null);
+    setActiveLeg(0);
     setRouteError(null);
     setRouting(false);
   };
@@ -107,8 +108,8 @@ function App() {
   };
 
   const runPlan = async (legs: TripLeg[], prefs: RoutePrefs) => {
-    setRouteOptions(null);
-    setSelectedRoute(0);
+    setLegPlans(null);
+    setActiveLeg(0);
     setRouteError(null);
     setRouting(true);
 
@@ -125,52 +126,34 @@ function App() {
     }, 4000);
 
     try {
-      if (valid.length === 1) {
-        // Direct trip: surface the top itineraries so the user can choose
-        // between modes (e.g. skip the ferry, or prefer the bus over the train).
-        const leg = valid[0];
+      if (valid.length === 0) {
+        setRouteError('Pick a start and destination.');
+        return;
+      }
+
+      // Plan every leg independently so the user can string together their own
+      // combination of itineraries (multi-city flight style). Each leg keeps its
+      // own departure/arrival timing.
+      const plans: LegPlan[] = [];
+      for (const leg of valid) {
         const itineraries = await planTransit(
           { lat: leg.from!.lat, lon: leg.from!.lon },
           { lat: leg.to!.lat, lon: leg.to!.lon },
           { ...baseOpts, ...legTiming(leg) },
         );
-        if (itineraries.length === 0) {
-          setRouteError('No route found for these filters.');
-        } else {
-          setRouteOptions(rankItineraries(itineraries).slice(0, 5));
-          setSelectedRoute(0);
-        }
-      } else if (valid.length > 1) {
-        // Multi-leg trip: stitch the best option per leg into one route,
-        // honouring each leg's own departure/arrival timing.
-        const combinedLegs: OtpLeg[] = [];
-        let duration = 0;
-        let walkDistance = 0;
-        let startTime = 0;
-        let endTime = 0;
-        for (const leg of valid) {
-          const itineraries = await planTransit(
-            { lat: leg.from!.lat, lon: leg.from!.lon },
-            { lat: leg.to!.lat, lon: leg.to!.lon },
-            { ...baseOpts, ...legTiming(leg) },
-          );
-          const chosen = rankItineraries(itineraries)[0];
-          if (chosen) {
-            combinedLegs.push(...chosen.legs);
-            duration += chosen.duration;
-            walkDistance += chosen.walkDistance;
-            if (!startTime) startTime = chosen.startTime;
-            endTime = chosen.endTime;
-          }
-        }
-        if (combinedLegs.length === 0) {
-          setRouteError('No route found for these filters.');
-        } else {
-          setRouteOptions([{ duration, startTime, endTime, walkDistance, legs: combinedLegs }]);
-          setSelectedRoute(0);
-        }
+        plans.push({
+          id: leg.id,
+          fromName: leg.from!.primaryText,
+          toName: leg.to!.primaryText,
+          options: rankItineraries(itineraries).slice(0, 5),
+          selected: 0,
+        });
+      }
+
+      if (plans.every((plan) => plan.options.length === 0)) {
+        setRouteError('No route found for these filters.');
       } else {
-        setRouteError('Pick a start and destination.');
+        setLegPlans(plans);
       }
       setToast(null);
     } catch (err) {
@@ -184,6 +167,12 @@ function App() {
       window.clearTimeout(slowTimer);
       setRouting(false);
     }
+  };
+
+  const selectLegOption = (legIndex: number, optionIndex: number) => {
+    setLegPlans((prev) =>
+      prev ? prev.map((plan, i) => (i === legIndex ? { ...plan, selected: optionIndex } : plan)) : prev,
+    );
   };
 
   const handleShowRoute = (legs: TripLeg[]) => {
@@ -238,8 +227,14 @@ function App() {
     return pts;
   }, [tripLegs]);
 
-  const selectedOption = routeOptions?.[selectedRoute] ?? null;
-  const otpLegs = selectedOption?.legs ?? null;
+  // Only draw the leg the user is currently viewing — showing every leg at once
+  // gets cluttered on the map.
+  const otpLegs = useMemo<OtpLeg[] | null>(() => {
+    if (!legPlans) return null;
+    const plan = legPlans[Math.min(activeLeg, legPlans.length - 1)];
+    const opt = plan?.options[plan.selected];
+    return opt && opt.legs.length > 0 ? opt.legs : null;
+  }, [legPlans, activeLeg]);
 
   if (error && !position) {
     return <div className="p-4 bg-red-100 text-red-700">{error}</div>;
@@ -368,11 +363,12 @@ function App() {
         </button>
       )}
 
-      {(routeOptions || routing || routeError) && tripLegs && (
+      {(legPlans || routing || routeError) && tripLegs && (
         <ItineraryOptions
-          options={routeOptions ?? []}
-          selected={selectedRoute}
-          onSelect={setSelectedRoute}
+          legPlans={legPlans ?? []}
+          activeLeg={activeLeg}
+          onActiveLegChange={setActiveLeg}
+          onSelectOption={selectLegOption}
           onClose={clearRoute}
           prefs={routePrefs}
           onPrefsChange={handlePrefsChange}

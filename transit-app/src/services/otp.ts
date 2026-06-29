@@ -35,6 +35,19 @@ export interface OtpItinerary {
   legs: OtpLeg[];
 }
 
+/**
+ * One leg of a (possibly multi-leg) trip, planned independently. The user picks
+ * one itinerary per leg — multi-city flight style — and the selected options are
+ * stitched together into the route shown on the map.
+ */
+export interface LegPlan {
+  id: string;
+  fromName: string;
+  toName: string;
+  options: OtpItinerary[];
+  selected: number;
+}
+
 export interface PlanOptions {
   /** "YYYY-MM-DD" local date; defaults to OTP's "now". */
   date?: string;

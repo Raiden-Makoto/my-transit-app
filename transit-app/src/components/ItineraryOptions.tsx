@@ -1,6 +1,6 @@
-import { Footprints, Bus, TrainFront, TramFront, Ship, CableCar, ChevronRight, ChevronLeft, X } from 'lucide-react';
+import { Footprints, Bus, TrainFront, TramFront, Ship, CableCar, ChevronRight, ChevronLeft, X, Check } from 'lucide-react';
 import { useState, type ComponentType } from 'react';
-import type { OtpItinerary, OtpLeg, RoutePrefs } from '../services/otp';
+import type { LegPlan, OtpLeg, RoutePrefs } from '../services/otp';
 
 const MODE_ICON: Record<string, ComponentType<{ size?: number }>> = {
   WALK: Footprints,
@@ -170,9 +170,10 @@ function DirectionStep({ leg, isLast }: { leg: OtpLeg; isLast: boolean }) {
 }
 
 interface ItineraryOptionsProps {
-  options: OtpItinerary[];
-  selected: number;
-  onSelect: (index: number) => void;
+  legPlans: LegPlan[];
+  activeLeg: number;
+  onActiveLegChange: (legIndex: number) => void;
+  onSelectOption: (legIndex: number, optionIndex: number) => void;
   onClose: () => void;
   prefs: RoutePrefs;
   onPrefsChange: (next: RoutePrefs) => void;
@@ -181,9 +182,10 @@ interface ItineraryOptionsProps {
 }
 
 export default function ItineraryOptions({
-  options,
-  selected,
-  onSelect,
+  legPlans,
+  activeLeg,
+  onActiveLegChange,
+  onSelectOption,
   onClose,
   prefs,
   onPrefsChange,
@@ -193,20 +195,26 @@ export default function ItineraryOptions({
   const toggle = (key: keyof RoutePrefs) => onPrefsChange({ ...prefs, [key]: !prefs[key] });
   const [detailOpen, setDetailOpen] = useState(false);
 
-  // Only show the detail pane when its option exists and results are ready;
-  // otherwise (loading / error / empty) fall back to the list view.
-  const detail = detailOpen && !loading && !error && options[selected] ? options[selected] : null;
+  const multiLeg = legPlans.length > 1;
+  const safeActive = Math.min(activeLeg, Math.max(0, legPlans.length - 1));
+  const activePlan = legPlans[safeActive] ?? null;
 
-  const openDetail = (i: number) => {
-    onSelect(i);
-    setDetailOpen(true);
-  };
+  // The itinerary the user has chosen for each leg, in order.
+  const selectedOptions = legPlans.map((plan) => plan.options[plan.selected]).filter(Boolean);
+  const totalDuration = selectedOptions.reduce((sum, opt) => sum + opt.duration, 0);
+  const totalWalk = selectedOptions.reduce((sum, opt) => sum + opt.walkDistance, 0);
+  const startTime = selectedOptions[0]?.startTime;
+  const endTime = selectedOptions[selectedOptions.length - 1]?.endTime;
+
+  // Only show the directions pane once results are ready and at least one leg
+  // has a chosen option.
+  const showDetail = detailOpen && !loading && !error && selectedOptions.length > 0;
 
   return (
     <div className="absolute top-[72px] left-[80px] z-[1000] w-[min(calc(92vw-80px),400px)] font-sans">
       <div className="bg-white dark:bg-[#2a2a2e] rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] overflow-hidden">
         <div className="flex items-center justify-between px-3 py-2 border-b border-[#e8eaed] dark:border-[#3a3a3e]">
-          {detail ? (
+          {showDetail ? (
             <button
               type="button"
               onClick={() => setDetailOpen(false)}
@@ -218,7 +226,7 @@ export default function ItineraryOptions({
             </button>
           ) : (
             <span className="text-[12px] font-semibold uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6]">
-              {loading ? 'Finding routes…' : options.length > 1 ? `${options.length} routes` : 'Route'}
+              {loading ? 'Finding routes…' : multiLeg ? `Trip · ${legPlans.length} legs` : 'Route'}
             </span>
           )}
           <button
@@ -233,65 +241,151 @@ export default function ItineraryOptions({
 
         {error ? (
           <div className="px-3 py-4 text-[13px] text-[#d93025]">{error}</div>
-        ) : loading && options.length === 0 ? (
+        ) : loading && legPlans.length === 0 ? (
           <div className="px-3 py-4 text-[13px] text-[#5f6368] dark:text-[#9aa0a6]">Searching for routes…</div>
         ) : (
           <div className="overflow-hidden">
             <div
               className="flex w-[200%] transition-transform duration-300 ease-out"
-              style={{ transform: detail ? 'translateX(-50%)' : 'translateX(0)' }}
+              style={{ transform: showDetail ? 'translateX(-50%)' : 'translateX(0)' }}
             >
-              {/* Master: filters + selectable route options. */}
+              {/* Master: filters + per-leg selection of route options. */}
               <div className="w-1/2 shrink-0">
                 <div className="flex flex-wrap gap-1.5 px-3 py-2 border-b border-[#e8eaed] dark:border-[#3a3a3e]">
                   {MODE_FILTERS.map(({ key, label, Icon }) => (
                     <FilterChip key={key} active={prefs[key]} label={label} Icon={Icon} onClick={() => toggle(key)} />
                   ))}
                 </div>
-                <ul className="max-h-[55vh] overflow-y-auto">
-                  {options.map((opt, i) => {
-                    const isSelected = i === selected;
-                    return (
-                      <li key={i}>
+
+                {/* Leg tabs (multi-leg only) — pick an itinerary per leg. */}
+                {multiLeg && (
+                  <div className="flex gap-1 overflow-x-auto px-2 py-2 border-b border-[#e8eaed] dark:border-[#3a3a3e]">
+                    {legPlans.map((plan, i) => {
+                      const isActive = i === safeActive;
+                      const chosen = plan.options[plan.selected];
+                      return (
                         <button
+                          key={plan.id}
                           type="button"
-                          onClick={() => openDetail(i)}
-                          aria-pressed={isSelected}
-                          className={`w-full text-left px-3 py-2.5 border-l-[3px] transition-colors ${
-                            isSelected
-                              ? 'border-[#1a73e8] bg-[#e8f0fe] dark:bg-[#1a3a5c]'
-                              : 'border-transparent hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]'
+                          onClick={() => onActiveLegChange(i)}
+                          aria-pressed={isActive}
+                          className={`flex min-w-[88px] shrink-0 flex-col items-start rounded-lg px-2.5 py-1.5 text-left transition-colors ${
+                            isActive
+                              ? 'bg-[#e8f0fe] dark:bg-[#1a3a5c]'
+                              : 'bg-[#f1f3f4] dark:bg-[#3a3a3e] hover:bg-[#e8eaed] dark:hover:bg-[#444448]'
                           }`}
                         >
-                          <div className="flex items-baseline justify-between mb-1.5">
-                            <span className="text-[16px] font-semibold text-[#202124] dark:text-[#e8eaed]">
-                              {fmtDuration(opt.duration)}
-                            </span>
-                            <span className="text-[11px] text-[#5f6368] dark:text-[#9aa0a6]">
-                              {fmtTime(opt.startTime)} – {fmtTime(opt.endTime)} · {fmtWalk(opt.walkDistance)} walk
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1 flex-wrap">
-                            {opt.legs.map((leg, j) => (
-                              <span key={j} className="inline-flex items-center gap-1">
-                                {j > 0 && <ChevronRight size={12} className="text-[#bdc1c6] dark:text-[#5f6368]" />}
-                                <LegChip leg={leg} />
-                              </span>
-                            ))}
-                            <ChevronRight size={14} className="ml-auto text-[#bdc1c6] dark:text-[#5f6368]" />
-                          </div>
+                          <span className="flex items-center gap-1 text-[11px] font-semibold text-[#5f6368] dark:text-[#9aa0a6]">
+                            Leg {i + 1}
+                            {chosen && <Check size={11} className="text-[#1a73e8]" />}
+                          </span>
+                          <span className="max-w-[120px] truncate text-[12px] text-[#202124] dark:text-[#e8eaed]">
+                            {plan.toName}
+                          </span>
+                          <span className="text-[11px] text-[#5f6368] dark:text-[#9aa0a6]">
+                            {chosen ? fmtDuration(chosen.duration) : 'No route'}
+                          </span>
                         </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {multiLeg && activePlan && (
+                  <div className="px-3 pt-2 text-[12px] text-[#5f6368] dark:text-[#9aa0a6] truncate">
+                    {activePlan.fromName} → {activePlan.toName}
+                  </div>
+                )}
+
+                {activePlan && activePlan.options.length === 0 ? (
+                  <div className="px-3 py-4 text-[13px] text-[#5f6368] dark:text-[#9aa0a6]">
+                    No route found for this leg.
+                  </div>
+                ) : (
+                  <ul className="max-h-[48vh] overflow-y-auto">
+                    {activePlan?.options.map((opt, i) => {
+                      const isSelected = i === activePlan.selected;
+                      return (
+                        <li key={i}>
+                          <button
+                            type="button"
+                            onClick={() => onSelectOption(safeActive, i)}
+                            aria-pressed={isSelected}
+                            className={`w-full text-left px-3 py-2.5 border-l-[3px] transition-colors ${
+                              isSelected
+                                ? 'border-[#1a73e8] bg-[#e8f0fe] dark:bg-[#1a3a5c]'
+                                : 'border-transparent hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]'
+                            }`}
+                          >
+                            <div className="flex items-baseline justify-between mb-1.5">
+                              <span className="text-[16px] font-semibold text-[#202124] dark:text-[#e8eaed]">
+                                {fmtDuration(opt.duration)}
+                              </span>
+                              <span className="text-[11px] text-[#5f6368] dark:text-[#9aa0a6]">
+                                {fmtTime(opt.startTime)} – {fmtTime(opt.endTime)} · {fmtWalk(opt.walkDistance)} walk
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {opt.legs.map((leg, j) => (
+                                <span key={j} className="inline-flex items-center gap-1">
+                                  {j > 0 && <ChevronRight size={12} className="text-[#bdc1c6] dark:text-[#5f6368]" />}
+                                  <LegChip leg={leg} />
+                                </span>
+                              ))}
+                              {isSelected && <Check size={15} className="ml-auto text-[#1a73e8]" />}
+                            </div>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+
+                {/* Footer: combined trip summary + open full directions. */}
+                {selectedOptions.length > 0 && (
+                  <div className="flex items-center justify-between gap-2 border-t border-[#e8eaed] dark:border-[#3a3a3e] px-3 py-2.5">
+                    <div className="min-w-0">
+                      <div className="text-[15px] font-semibold text-[#202124] dark:text-[#e8eaed]">
+                        {fmtDuration(totalDuration)}
+                      </div>
+                      <div className="truncate text-[11px] text-[#5f6368] dark:text-[#9aa0a6]">
+                        {startTime != null && endTime != null && `${fmtTime(startTime)} – ${fmtTime(endTime)} · `}
+                        {fmtWalk(totalWalk)} walk
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDetailOpen(true)}
+                      className="flex shrink-0 items-center gap-1 rounded-full bg-[#1a73e8] px-3.5 py-2 text-[13px] font-medium text-white hover:bg-[#1765cc]"
+                    >
+                      Directions
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {/* Detail: step-by-step directions for the selected option. */}
+              {/* Detail: combined step-by-step directions across every leg. */}
               <div className="w-1/2 shrink-0 max-h-[60vh] overflow-y-auto px-3 py-2">
-                {detail?.legs.map((leg, i) => (
-                  <DirectionStep key={i} leg={leg} isLast={i === detail.legs.length - 1} />
-                ))}
+                {legPlans.map((plan, li) => {
+                  const opt = plan.options[plan.selected];
+                  return (
+                    <div key={plan.id}>
+                      {multiLeg && (
+                        <div className="sticky top-0 z-10 -mx-3 mb-1 mt-1 bg-white/95 dark:bg-[#2a2a2e]/95 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6]">
+                          Leg {li + 1} · {plan.fromName} → {plan.toName}
+                        </div>
+                      )}
+                      {opt ? (
+                        opt.legs.map((leg, i) => (
+                          <DirectionStep key={i} leg={leg} isLast={i === opt.legs.length - 1} />
+                        ))
+                      ) : (
+                        <div className="py-2 text-[13px] text-[#5f6368] dark:text-[#9aa0a6]">No route for this leg.</div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

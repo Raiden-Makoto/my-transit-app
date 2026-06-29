@@ -205,11 +205,19 @@ const redPinIcon = new L.Icon({
 // hot-reload / prop changes).
 const MIN_ZOOM = 10;
 
+// Keep the user within the transit-service area (Metro Vancouver + Fraser Valley
+// out to the West Coast Express terminus); panning to the other side of the
+// world defeats the purpose of the app. [[south, west], [north, east]].
+const MAX_BOUNDS = L.latLngBounds([48.9, -123.6], [49.65, -121.8]);
+
 function MapConstraints() {
   const map = useMap();
   useEffect(() => {
     map.setMinZoom(MIN_ZOOM);
     if (map.getZoom() < MIN_ZOOM) map.setZoom(MIN_ZOOM);
+    // Hard wall at the region edges (viscosity 1.0 = no overscroll past it).
+    map.setMaxBounds(MAX_BOUNDS);
+    map.options.maxBoundsViscosity = 1.0;
   }, [map]);
   return null;
 }
@@ -284,6 +292,8 @@ export default function MapView({
       center={mapCenter}
       zoom={13}
       minZoom={10}
+      maxBounds={MAX_BOUNDS}
+      maxBoundsViscosity={1.0}
       scrollWheelZoom={true}
       zoomControl={false}
       style={{ height: '100%', width: '100%' }}
