@@ -344,6 +344,42 @@ query Plan($from: InputCoordinates!, $to: InputCoordinates!, $date: String, $tim
 }`;
 }
 
+// A sleeping HF Space cold-starts on first request: it can return an HTML
+// "is starting" page, a 5xx, or time out before the app is ready. Retry with
+// backoff for up to ~2 minutes so a waking Space recovers transparently.
+const WAKE_RETRY_BUDGET_MS = 120_000;
+const ATTEMPT_TIMEOUT_MS = 20_000;
+
+function mapItineraries(data) {
+  return (data?.data?.plan?.itineraries ?? []).map((it) => ({
+    duration: it.duration,
+    startTime: it.startTime,
+    endTime: it.endTime,
+    walkDistance: it.walkDistance,
+    legs: (it.legs ?? []).map((leg) => ({
+      mode: leg.mode,
+      duration: leg.duration,
+      distance: leg.distance,
+      startTime: leg.startTime,
+      endTime: leg.endTime,
+      headsign: leg.headsign ?? null,
+      // Stops travelled on this leg = intermediate stops + the alighting stop.
+      numStops: Array.isArray(leg.intermediateStops) ? leg.intermediateStops.length + 1 : null,
+      from: leg.from,
+      to: leg.to,
+      route: leg.route
+        ? {
+            shortName: leg.route.shortName,
+            longName: leg.route.longName,
+            color: leg.route.color,
+            textColor: leg.route.textColor,
+          }
+        : null,
+      geometry: leg.legGeometry?.points ? decodePolyline(leg.legGeometry.points) : [],
+    })),
+  }));
+}
+
 app.post('/api/otp-plan', async (req, res) => {
   if (!OTP_URL) {
     return res.status(500).json({ error: 'Server is missing OTP_URL. Add it to transit-app/.env.local.' });
@@ -359,77 +395,77 @@ app.post('/api/otp-plan', async (req, res) => {
   // Private Spaces require an HF token with access; harmless for public ones.
   if (HF_TOKEN) headers.Authorization = `Bearer ${HF_TOKEN}`;
 
-  const query = buildPlanQuery(buildTransportModes(modes));
+  const body = JSON.stringify({
+    query: buildPlanQuery(buildTransportModes(modes)),
+    variables: {
+      from: { lat: from.lat, lon: from.lon },
+      to: { lat: to.lat, lon: to.lon },
+      date: date ?? null,
+      time: time ?? null,
+      arriveBy: Boolean(arriveBy),
+      numItineraries: numItineraries ?? 3,
+    },
+  });
 
-  try {
-    const otpRes = await fetch(endpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        query,
-        variables: {
-          from: { lat: from.lat, lon: from.lon },
-          to: { lat: to.lat, lon: to.lon },
-          date: date ?? null,
-          time: time ?? null,
-          arriveBy: Boolean(arriveBy),
-          numItineraries: numItineraries ?? 3,
-        },
-      }),
-      signal: AbortSignal.timeout(20000),
-    });
+  const started = Date.now();
+  let attempt = 0;
+  let lastDetail = 'no response';
 
-    const text = await otpRes.text();
-    if (!otpRes.ok) {
-      console.error(`[otp-plan] OTP HTTP ${otpRes.status} ${otpRes.statusText}:`, text.slice(0, 300));
-      return res.status(502).json({ error: `OTP request failed (${otpRes.status}).`, detail: text.slice(0, 300) });
-    }
-
-    let data;
+  while (Date.now() - started < WAKE_RETRY_BUDGET_MS) {
+    attempt += 1;
     try {
-      data = JSON.parse(text);
-    } catch {
-      // A sleeping Space returns an HTML wake-up page rather than JSON.
-      return res.status(502).json({ error: 'OTP returned non-JSON (the Space may be waking up — try again).' });
-    }
-    if (data.errors) {
-      console.error('[otp-plan] OTP GraphQL errors:', JSON.stringify(data.errors).slice(0, 300));
-      return res.status(502).json({ error: 'OTP query error.', detail: data.errors });
+      const otpRes = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body,
+        signal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
+      });
+      const text = await otpRes.text();
+
+      if (!otpRes.ok) {
+        // 5xx is usually a waking/transient Space; 4xx is a real client error.
+        if (otpRes.status >= 500) {
+          lastDetail = `HTTP ${otpRes.status}`;
+          console.warn(`[otp-plan] attempt ${attempt}: ${lastDetail} (waking?), retrying…`);
+        } else {
+          return res.status(502).json({ error: `OTP request failed (${otpRes.status}).`, detail: text.slice(0, 300) });
+        }
+      } else {
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          // A sleeping Space returns an HTML wake-up page rather than JSON.
+          lastDetail = 'non-JSON wake-up page';
+          console.warn(`[otp-plan] attempt ${attempt}: ${lastDetail}, retrying…`);
+          data = null;
+        }
+        if (data) {
+          if (data.errors) {
+            console.error('[otp-plan] OTP GraphQL errors:', JSON.stringify(data.errors).slice(0, 300));
+            return res.status(502).json({ error: 'OTP query error.', detail: data.errors });
+          }
+          return res.json({ itineraries: mapItineraries(data) });
+        }
+      }
+    } catch (err) {
+      // Network error / per-attempt timeout — treat as a still-waking Space.
+      lastDetail = String(err);
+      console.warn(`[otp-plan] attempt ${attempt} failed: ${lastDetail}, retrying…`);
     }
 
-    const itineraries = (data?.data?.plan?.itineraries ?? []).map((it) => ({
-      duration: it.duration,
-      startTime: it.startTime,
-      endTime: it.endTime,
-      walkDistance: it.walkDistance,
-      legs: (it.legs ?? []).map((leg) => ({
-        mode: leg.mode,
-        duration: leg.duration,
-        distance: leg.distance,
-        startTime: leg.startTime,
-        endTime: leg.endTime,
-        headsign: leg.headsign ?? null,
-        // Stops travelled on this leg = intermediate stops + the alighting stop.
-        numStops: Array.isArray(leg.intermediateStops) ? leg.intermediateStops.length + 1 : null,
-        from: leg.from,
-        to: leg.to,
-        route: leg.route
-          ? {
-              shortName: leg.route.shortName,
-              longName: leg.route.longName,
-              color: leg.route.color,
-              textColor: leg.route.textColor,
-            }
-          : null,
-        geometry: leg.legGeometry?.points ? decodePolyline(leg.legGeometry.points) : [],
-      })),
-    }));
-
-    res.json({ itineraries });
-  } catch (err) {
-    console.error('[otp-plan] failed to reach OTP:', err);
-    res.status(502).json({ error: 'Could not reach OTP.', detail: String(err) });
+    // Backoff before the next attempt, but don't exceed the overall budget.
+    const remaining = WAKE_RETRY_BUDGET_MS - (Date.now() - started);
+    if (remaining <= 0) break;
+    await sleep(Math.min(Math.min(10_000, 2_000 * attempt), remaining));
   }
+
+  console.error(`[otp-plan] gave up after ${attempt} attempts: ${lastDetail}`);
+  return res.status(503).json({
+    error: 'The routing server is starting up. Please try again in a moment.',
+    warming: true,
+    detail: lastDetail,
+  });
 });
 
 app.get('/api/health', (_req, res) =>

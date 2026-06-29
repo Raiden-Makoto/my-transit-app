@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { Menu, X, Route, Sparkles, TrainFront, Sun, Moon } from 'lucide-react';
+import { Menu, X, Route, Sparkles, TrainFront, Sun, Moon, Loader2 } from 'lucide-react';
 import SearchBox from './components/SearchBox';
 import CollectionPicker from './components/CollectionPicker';
 import Sidebar from './components/Sidebar';
@@ -48,6 +48,7 @@ function App() {
   const [routing, setRouting] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routePrefs, setRoutePrefs] = useState<RoutePrefs>(DEFAULT_ROUTE_PREFS);
+  const [toast, setToast] = useState<{ message: string; tone: 'info' | 'error' } | null>(null);
   const [tripInitialLegs, setTripInitialLegs] = useState<TripLeg[] | null>(null);
   const [aiStops, setAiStops] = useState<SavedLocation[] | null>(null);
   const [showCorridors, setShowCorridors] = useState(true);
@@ -114,6 +115,15 @@ function App() {
     const valid = legs.filter((leg) => leg.from && leg.to);
     const baseOpts = { numItineraries: 8, modes: prefsToModes(prefs) };
 
+    // If the request is slow, the OTP Space is likely cold-starting. Surface a
+    // toast while the proxy retries (it waits up to ~2 minutes for it to wake).
+    const slowTimer = window.setTimeout(() => {
+      setToast({
+        message: 'Server is currently down. Reconnecting — this can take up to 2 minutes…',
+        tone: 'info',
+      });
+    }, 4000);
+
     try {
       if (valid.length === 1) {
         // Direct trip: surface the top itineraries so the user can choose
@@ -162,9 +172,16 @@ function App() {
       } else {
         setRouteError('Pick a start and destination.');
       }
+      setToast(null);
     } catch (err) {
       setRouteError(err instanceof Error ? err.message : 'Routing failed.');
+      setToast({
+        message: 'Server is currently down. Please try again in a minute.',
+        tone: 'error',
+      });
+      window.setTimeout(() => setToast(null), 8000);
     } finally {
+      window.clearTimeout(slowTimer);
       setRouting(false);
     }
   };
@@ -398,6 +415,28 @@ function App() {
 
       {pickerPlace && (
         <CollectionPicker place={pickerPlace} collections={collections} onClose={() => setPickerPlace(null)} />
+      )}
+
+      {toast && (
+        <div
+          role="status"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1300] flex items-center gap-2.5 max-w-[90vw] rounded-lg px-4 py-2.5 shadow-[0_2px_10px_rgba(0,0,0,0.3)] font-sans text-[14px] bg-[#202124] text-white dark:bg-[#e8eaed] dark:text-[#202124]"
+        >
+          {toast.tone === 'info' ? (
+            <Loader2 size={16} className="shrink-0 animate-spin" />
+          ) : (
+            <span className="shrink-0 w-2 h-2 rounded-full bg-[#f28b82]" />
+          )}
+          <span>{toast.message}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="ml-1 shrink-0 rounded-full p-1 hover:bg-white/15 dark:hover:bg-black/10"
+            aria-label="Dismiss"
+          >
+            <X size={15} />
+          </button>
+        </div>
       )}
 
       <MapView
