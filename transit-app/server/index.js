@@ -106,10 +106,37 @@ async function getTravelMatrixMinutes(places) {
   }
 }
 
-function buildMessages({ places, start, end, travelMatrix }) {
+function buildMessages({ places, start, end, travelMatrix, mealTimes }) {
   const placeLines = places
     .map((p, i) => `${i + 1}. [id: ${p.id}] ${p.name}${p.address ? ` (${p.address})` : ''} [lat ${p.lat}, lon ${p.lon}]`)
     .join('\n');
+
+  // Dining scheduling. We always give the agent meal guidance because the model
+  // recognizes restaurants by name far more reliably than the client heuristic
+  // does (so undetected venues still get anchored to a meal). When the client
+  // detected food it sends explicit prefs (respecting meals the user turned
+  // off); otherwise we fall back to sensible default meal times.
+  const flaggedFood = places.filter((p) => p.isFood).map((p) => p.name);
+  const lunch = mealTimes ? mealTimes.lunch : '12:30';
+  const dinner = mealTimes ? mealTimes.dinner : '18:30';
+  const mealSection = [
+    'DINING / MEAL SCHEDULING — follow carefully:',
+    'First, identify every dining venue among the places — anything whose name indicates food or drink (restaurant, cafe, diner, bistro, grill, pizzeria, sushi/ramen/pho/taco/curry spot, steakhouse, bakery, bar/pub, etc.).' +
+      (flaggedFood.length ? ` Known dining venues include: ${flaggedFood.join(', ')}.` : ''),
+    'Dining venues are MEAL ANCHORS. Schedule each meal venue FIRST at its meal time, then arrange the non-dining places into the time around the meals.',
+    'MEAL WINDOWS: lunch MUST START between 11:00 and 13:00; dinner MUST START between 17:00 and 19:00.',
+    lunch
+      ? `If a dining venue is included, aim for lunch to start near ${lunch}, but always within the 11:00–13:00 window.`
+      : 'The user does NOT want a scheduled lunch — do not place a midday meal.',
+    dinner
+      ? `If a dining venue is included, aim for dinner to start near ${dinner}, but always within the 17:00–19:00 window.`
+      : 'The user does NOT want a scheduled dinner — do not place an evening meal.',
+    'SPACE THE MEALS OUT: if lunch runs late (toward 13:00), schedule dinner toward the later end of its window — never put dinner at 17:00 right after a 13:00 lunch.',
+    'FILL BIG GAPS: anchoring a meal to its window can leave a large empty gap before it. Do NOT leave an idle gap longer than ~45 minutes between consecutive stops — if anchoring creates one, slot another (non-meal) place into that gap, reordering the route as needed, instead of waiting idle. Only leave a long gap if no remaining place can fill it.',
+    'NEVER schedule a restaurant outside these windows (e.g., a meal at 2:51pm or 9pm). A dining venue MUST land in its meal window. If neither window fits a dining venue inside the available time, OMIT that venue (record it in omittedPlaces) rather than dropping it into a random slot.',
+    'If there are more dining venues than meal slots that fit, keep the best-fitting ones in the windows and omit the rest.',
+    '',
+  ].join('\n');
 
   let travelSection;
   if (travelMatrix) {
@@ -123,8 +150,9 @@ function buildMessages({ places, start, end, travelMatrix }) {
       })
       .join('\n');
     travelSection = [
-      'REAL transit travel times between places (minutes) — use THESE exact numbers, not straight-line distance:',
+      'REAL public-transit travel times between places (minutes) — use THESE exact numbers, not straight-line distance:',
       matrixLines,
+      'Any pair NOT listed above is too far apart to visit consecutively by transit — do NOT schedule those two back-to-back. Order the route so each consecutive pair is one that IS listed.',
       '',
     ].join('\n');
   } else {
@@ -179,6 +207,7 @@ function buildMessages({ places, start, end, travelMatrix }) {
     placeLines,
     '',
     travelSection,
+    mealSection,
     'Write the Markdown itinerary, then the hidden JSON block.',
   ].join('\n');
 
@@ -193,7 +222,7 @@ app.post('/api/plan-trip', async (req, res) => {
     return res.status(500).json({ error: 'Server is missing HF_TOKEN. Add it to transit-app/.env.local.' });
   }
 
-  const { places, start, end } = req.body ?? {};
+  const { places, start, end, mealTimes } = req.body ?? {};
   if (!Array.isArray(places) || places.length === 0) {
     return res.status(400).json({ error: 'At least one place is required.' });
   }
@@ -201,16 +230,26 @@ app.post('/api/plan-trip', async (req, res) => {
     return res.status(400).json({ error: 'Both start and end times are required.' });
   }
 
-  const travelMatrix = await getTravelMatrixMinutes(places);
+  // Prefer REAL transit times from OTP (routed at the trip's start time, with
+  // far-apart pairs pruned); fall back to the OSRM distance-scaled heuristic if
+  // OTP is unavailable or returns nothing useful.
+  const startDate = typeof start === 'string' ? start.slice(0, 10) : null;
+  const startTime = typeof start === 'string' && start.length >= 16 ? start.slice(11, 16) : null;
+  let travelMatrix = await getTransitTravelMatrix(places, startDate, startTime);
+  let travelSource = 'OTP transit';
+  if (!travelMatrix) {
+    travelMatrix = await getTravelMatrixMinutes(places);
+    travelSource = 'OSRM heuristic';
+  }
   if (travelMatrix) {
-    console.log(`[plan-trip] Using distance-scaled transit times (2.1x–3.2x) for ${places.length} places.`);
+    console.log(`[plan-trip] travel times via ${travelSource} for ${places.length} places.`);
   }
 
   let hfRes;
   try {
     hfRes = await fetchHfWithRetry({
       model: HF_MODEL,
-      messages: buildMessages({ places, start, end, travelMatrix }),
+      messages: buildMessages({ places, start, end, travelMatrix, mealTimes }),
       temperature: 0.3,
       max_tokens: 1024,
       stream: true,
@@ -383,6 +422,123 @@ function mapItineraries(data) {
       geometry: leg.legGeometry?.points ? decodePolyline(leg.legGeometry.points) : [],
     })),
   }));
+}
+
+// Great-circle distance (km) between two {lat, lon} points.
+function haversineKm(a, b) {
+  const R = 6371;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const s =
+    Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+// One OTP transit query between two coordinates; returns the fastest itinerary's
+// duration in minutes, or null if there's no result / it failed within budget.
+async function otpTransitMinutes(from, to, date, time, { wakeBudgetMs, attemptTimeoutMs }) {
+  const endpoint = `${OTP_URL.replace(/\/$/, '')}/otp/gtfs/v1`;
+  const headers = { 'Content-Type': 'application/json' };
+  if (HF_TOKEN) headers.Authorization = `Bearer ${HF_TOKEN}`;
+  const body = JSON.stringify({
+    query: buildPlanQuery(buildTransportModes(undefined)),
+    variables: {
+      from: { lat: from.lat, lon: from.lon },
+      to: { lat: to.lat, lon: to.lon },
+      date: date ?? null,
+      time: time ?? null,
+      arriveBy: false,
+      numItineraries: 2,
+    },
+  });
+
+  const started = Date.now();
+  while (Date.now() - started < wakeBudgetMs) {
+    try {
+      const res = await fetch(endpoint, { method: 'POST', headers, body, signal: AbortSignal.timeout(attemptTimeoutMs) });
+      const text = await res.text();
+      if (res.ok) {
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = null; // sleeping Space wake-up page
+        }
+        if (data && !data.errors) {
+          const its = mapItineraries(data);
+          if (its.length === 0) return null;
+          return Math.round(Math.min(...its.map((it) => it.duration)) / 60);
+        }
+      }
+    } catch {
+      // timeout / network — fall through to backoff
+    }
+    const remaining = wakeBudgetMs - (Date.now() - started);
+    if (remaining <= 0) break;
+    await sleep(Math.min(2000, remaining));
+  }
+  return null;
+}
+
+// Straight-line distance beyond which two places are "obviously too far" to be
+// visited consecutively — we don't waste an OTP query on them and tell the agent
+// not to chain them.
+const CONSECUTIVE_CAP_KM = 25;
+// Safety cap on OTP calls; above this we fall back to the OSRM heuristic.
+const MATRIX_MAX_OTP_CALLS = 40;
+
+/**
+ * Real transit travel-time matrix (minutes) via OTP. We first prune pairs that
+ * are too far apart (straight-line) so we only route plausibly-consecutive ones,
+ * warm the Space once, then route the remaining pairs concurrently. Entries left
+ * null mean "too far / unreachable — don't visit consecutively". Returns null to
+ * signal the caller to fall back to the heuristic.
+ */
+async function getTransitTravelMatrix(places, date, time) {
+  if (!OTP_URL) return null;
+  const n = places.length;
+  const matrix = Array.from({ length: n }, () => Array(n).fill(null));
+
+  const pairs = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (haversineKm(places[i], places[j]) <= CONSECUTIVE_CAP_KM) pairs.push([i, j]);
+    }
+  }
+  if (pairs.length === 0) return null; // nothing close enough to route — use heuristic
+  if (pairs.length > MATRIX_MAX_OTP_CALLS) {
+    console.warn(`[plan-trip] ${pairs.length} candidate pairs > cap (${MATRIX_MAX_OTP_CALLS}); using heuristic.`);
+    return null;
+  }
+
+  // Transit is asymmetric, but for planning estimates we route each pair once and
+  // mirror it to keep the OTP call count (and cold-start cost) bounded.
+  const [a, b] = pairs[0];
+  const warm = await otpTransitMinutes(places[a], places[b], date, time, {
+    wakeBudgetMs: WAKE_RETRY_BUDGET_MS,
+    attemptTimeoutMs: ATTEMPT_TIMEOUT_MS,
+  });
+  matrix[a][b] = warm;
+  matrix[b][a] = warm;
+
+  const rest = pairs.slice(1);
+  let idx = 0;
+  const worker = async () => {
+    while (idx < rest.length) {
+      const [i, j] = rest[idx++];
+      const m = await otpTransitMinutes(places[i], places[j], date, time, {
+        wakeBudgetMs: 8000,
+        attemptTimeoutMs: 8000,
+      });
+      matrix[i][j] = m;
+      matrix[j][i] = m;
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(6, rest.length) }, worker));
+
+  const hasAny = matrix.some((row) => row.some((v) => v != null));
+  return hasAny ? matrix : null;
 }
 
 app.post('/api/otp-plan', async (req, res) => {

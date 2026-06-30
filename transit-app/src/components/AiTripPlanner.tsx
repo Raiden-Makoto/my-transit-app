@@ -7,7 +7,9 @@ import {
   parseItineraryData,
   resolveStops,
   omittedNote,
+  isFoodPlace,
   type ItineraryData,
+  type MealTimes,
 } from '../services/planTrip';
 import type { PlaceCollection, SavedLocation } from '../types/location';
 
@@ -54,6 +56,10 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [start, setStart] = useState(nowInput);
   const [end, setEnd] = useState(defaultEndInput);
+  const [lunchEnabled, setLunchEnabled] = useState(true);
+  const [lunchTime, setLunchTime] = useState('12:30');
+  const [dinnerEnabled, setDinnerEnabled] = useState(true);
+  const [dinnerTime, setDinnerTime] = useState('18:30');
   const [started, setStarted] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [text, setText] = useState('');
@@ -67,6 +73,10 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
       setSelected(new Set(list.places.map((p) => p.id)));
       setStart(nowInput);
       setEnd(defaultEndInput);
+      setLunchEnabled(true);
+      setLunchTime('12:30');
+      setDinnerEnabled(true);
+      setDinnerTime('18:30');
       setStarted(false);
       setStreaming(false);
       setText('');
@@ -76,6 +86,9 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
   }, [list, nowInput, defaultEndInput]);
 
   if (!list) return null;
+
+  // Dining venues among the currently-selected places — drives the meal-time UI.
+  const foodPlaces = list.places.filter((p) => selected.has(p.id) && isFoodPlace(p));
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -113,8 +126,12 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
     setText('');
     setPins([]);
     setOmitted([]);
+    const mealTimes: MealTimes | undefined =
+      foodPlaces.length > 0
+        ? { lunch: lunchEnabled ? lunchTime : undefined, dinner: dinnerEnabled ? dinnerTime : undefined }
+        : undefined;
     try {
-      const full = await streamPlanTrip(chosen, start, end, setText);
+      const full = await streamPlanTrip(chosen, start, end, setText, mealTimes);
       const data = parseItineraryData(full);
       if (data) {
         setPins(resolveStops(data, chosen));
@@ -220,6 +237,67 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
                 <p className="mb-3 text-[12px] text-[#9aa0a6]">
                   Up to 1 week ahead from today, with a window of at most 24 hours.
                 </p>
+              )}
+
+              {foodPlaces.length > 0 && (
+                <div className="mb-4 rounded-lg border border-[#eceff1] bg-[#faf5fc] px-3 py-3">
+                  <p className="mb-2 text-[13px] font-medium text-[#202124]">
+                    We spotted {foodPlaces.length === 1 ? 'a dining spot' : 'dining spots'} in your selection — when do
+                    you like to eat?
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setLunchEnabled((v) => !v)}
+                        className="shrink-0"
+                        aria-pressed={lunchEnabled}
+                        aria-label="Toggle lunch"
+                      >
+                        {lunchEnabled ? (
+                          <CheckSquare size={18} className="text-[#7b1fa2]" />
+                        ) : (
+                          <Square size={18} className="text-[#9aa0a6]" />
+                        )}
+                      </button>
+                      <span className="w-14 text-[13px] text-[#202124]">Lunch</span>
+                      <input
+                        type="time"
+                        value={lunchTime}
+                        min="11:00"
+                        max="13:00"
+                        disabled={!lunchEnabled}
+                        onChange={(e) => setLunchTime(e.target.value)}
+                        className="rounded-lg border border-[#dadce0] px-2 py-1 text-[14px] text-[#202124] focus:border-[#7b1fa2] focus:outline-none disabled:opacity-40"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setDinnerEnabled((v) => !v)}
+                        className="shrink-0"
+                        aria-pressed={dinnerEnabled}
+                        aria-label="Toggle dinner"
+                      >
+                        {dinnerEnabled ? (
+                          <CheckSquare size={18} className="text-[#7b1fa2]" />
+                        ) : (
+                          <Square size={18} className="text-[#9aa0a6]" />
+                        )}
+                      </button>
+                      <span className="w-14 text-[13px] text-[#202124]">Dinner</span>
+                      <input
+                        type="time"
+                        value={dinnerTime}
+                        min="17:00"
+                        max="19:00"
+                        disabled={!dinnerEnabled}
+                        onChange={(e) => setDinnerTime(e.target.value)}
+                        className="rounded-lg border border-[#dadce0] px-2 py-1 text-[14px] text-[#202124] focus:border-[#7b1fa2] focus:outline-none disabled:opacity-40"
+                      />
+                    </div>
+                  </div>
+                </div>
               )}
 
               <div className="mb-2 flex items-center justify-between">

@@ -5,6 +5,8 @@ const PHOTON_URL = 'https://photon.komoot.io/api/';
 type PhotonProperties = {
   osm_id?: number;
   osm_type?: string;
+  osm_key?: string; // e.g., "amenity", "shop", "tourism"
+  osm_value?: string; // e.g., "restaurant", "cafe", "museum"
   name?: string;
   housenumber?: string;
   street?: string;
@@ -52,6 +54,7 @@ function toSavedLocation(feature: PhotonFeature, index: number): SavedLocation {
     secondaryText: buildSecondaryText(properties, primaryText),
     lat,
     lon,
+    category: properties.osm_value,
   };
 }
 

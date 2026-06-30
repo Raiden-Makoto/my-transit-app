@@ -1,5 +1,36 @@
 import type { SavedLocation } from '../types/location';
 
+/** Preferred meal times (24h "HH:mm"), passed to the agent for scheduling. */
+export interface MealTimes {
+  lunch?: string;
+  dinner?: string;
+}
+
+// OSM amenity values that indicate a place where you sit down to eat/drink.
+const FOOD_CATEGORIES = new Set([
+  'restaurant',
+  'cafe',
+  'fast_food',
+  'food_court',
+  'bar',
+  'pub',
+  'biergarten',
+  'ice_cream',
+  'cafeteria',
+]);
+
+// Fallback name heuristic for places saved without an OSM category. The agent
+// also identifies dining venues by name server-side, so this only needs to be
+// good enough to surface the meal-time UI for common cases.
+const FOOD_NAME_RE =
+  /\b(restaurant|cafe|café|coffee|bistro|diner|grill|eatery|kitchen|cuisine|sushi|ramen|noodle|pizz|pasta|spaghetti|burger|taco|taqueria|curry|kebab|shawarma|dumpling|hotpot|pho|bbq|steakhouse|chophouse|smokehouse|seafood|oyster|tavern|pub|gastropub|teahouse|tea house|bakery|patisserie|brewery|izakaya|trattoria|osteria|cantina|deli|brasserie|bar & grill|fish ?& ?chips)\b/i;
+
+/** Whether a place looks like a dining venue (by OSM category, else by name). */
+export function isFoodPlace(place: SavedLocation): boolean {
+  if (place.category && FOOD_CATEGORIES.has(place.category)) return true;
+  return FOOD_NAME_RE.test(place.primaryText);
+}
+
 export interface ItineraryStop {
   id: string;
   name: string;
@@ -26,6 +57,7 @@ export async function streamPlanTrip(
   start: string,
   end: string,
   onText: (fullText: string) => void,
+  mealTimes?: MealTimes,
 ): Promise<string> {
   const res = await fetch('/api/plan-trip', {
     method: 'POST',
@@ -33,12 +65,14 @@ export async function streamPlanTrip(
     body: JSON.stringify({
       start,
       end,
+      mealTimes,
       places: places.map((p) => ({
         id: p.id,
         name: p.primaryText,
         address: p.secondaryText,
         lat: p.lat,
         lon: p.lon,
+        isFood: isFoodPlace(p),
       })),
     }),
   });

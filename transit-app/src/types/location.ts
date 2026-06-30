@@ -5,6 +5,8 @@ export interface SavedLocation {
     secondaryText: string; // e.g., "McNicoll Ave at Picola Crt..."
     lat: number;
     lon: number;
+    /** OSM amenity/shop value when known (e.g., "restaurant", "cafe"). */
+    category?: string;
   }
 
 export interface PlaceCollection {
