@@ -7,7 +7,6 @@ import TripPlanner from './components/TripPlanner';
 import { legTiming } from './services/tripTiming';
 import MapView, { type Bbox } from './components/MapView';
 import ItineraryOptions from './components/ItineraryOptions';
-import { formatItinerarySummary, formatGapNotices, type ItineraryData } from './services/planTrip';
 
 // Lazy-loaded so react-markdown only loads when the AI planner is opened.
 const AiTripPlanner = lazy(() => import('./components/AiTripPlanner'));
@@ -33,6 +32,25 @@ function rankItineraries(its: OtpItinerary[]): OtpItinerary[] {
   return [...its].sort((a, b) => a.duration - b.duration);
 }
 
+// Drop walk-only itineraries longer than 15 minutes — nobody wants a 99-minute
+// walk suggested (and OTP loves to list it first). Filtered out in every case:
+// if a leg's only option is a long walk we'd rather show "no route" than that.
+const MAX_WALK_ONLY_SECONDS = 15 * 60;
+function usableItineraries(its: OtpItinerary[]): OtpItinerary[] {
+  return its.filter((it) => {
+    const walkOnly = it.legs.length > 0 && it.legs.every((leg) => leg.mode === 'WALK');
+    return !(walkOnly && it.duration > MAX_WALK_ONLY_SECONDS);
+  });
+}
+
+function fmtTripDuration(seconds: number): string {
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h} h` : `${h} h ${m} min`;
+}
+
 function App() {
   const [position, setPosition] = useState<[number, number] | null>(null);
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
@@ -47,6 +65,7 @@ function App() {
   const [tripLegs, setTripLegs] = useState<TripLeg[] | null>(null);
   const [legPlans, setLegPlans] = useState<LegPlan[] | null>(null);
   const [activeLeg, setActiveLeg] = useState(0);
+  const [routeIsAi, setRouteIsAi] = useState(false);
   const [routing, setRouting] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routePrefs, setRoutePrefs] = useState<RoutePrefs>(DEFAULT_ROUTE_PREFS);
@@ -54,7 +73,6 @@ function App() {
     null,
   );
   const [tripInitialLegs, setTripInitialLegs] = useState<TripLeg[] | null>(null);
-  const [aiStops, setAiStops] = useState<SavedLocation[] | null>(null);
   const [showCorridors, setShowCorridors] = useState(true);
   const { theme, toggleTheme } = useTheme();
   const savedPlaces = useSavedPlaces();
@@ -100,17 +118,15 @@ function App() {
     setDestination(location);
     setViewedList(null);
     clearRoute();
-    setAiStops(null);
   };
 
   const handleViewList = (list: PlaceCollection) => {
     setDestination(null);
     clearRoute();
-    setAiStops(null);
     setViewedList(list);
   };
 
-  const runPlan = async (legs: TripLeg[], prefs: RoutePrefs) => {
+  const runPlan = async (legs: TripLeg[], prefs: RoutePrefs, ai = false) => {
     setLegPlans(null);
     setActiveLeg(0);
     setRouteError(null);
@@ -144,11 +160,18 @@ function App() {
           { lat: leg.to!.lat, lon: leg.to!.lon },
           { ...baseOpts, ...legTiming(leg) },
         );
+        // AI itineraries are scheduled to depart at a specific time, so show the
+        // 3 options that leave soonest; manual trips show the 5 fastest. Either
+        // way, drop unreasonably long walk-only options first.
+        const usable = usableItineraries(itineraries);
+        const options = ai
+          ? [...usable].sort((a, b) => a.startTime - b.startTime).slice(0, 3)
+          : rankItineraries(usable).slice(0, 5);
         plans.push({
           id: leg.id,
           fromName: leg.from!.primaryText,
           toName: leg.to!.primaryText,
-          options: rankItineraries(itineraries).slice(0, 5),
+          options,
           selected: 0,
         });
       }
@@ -178,37 +201,26 @@ function App() {
     );
   };
 
-  const handleShowRoute = (legs: TripLeg[]) => {
+  const handleShowRoute = (legs: TripLeg[], ai = false) => {
     setDestination(null);
     setViewedList(null);
-    setAiStops(null);
     setTripLegs(legs);
-    void runPlan(legs, routePrefs);
+    setRouteIsAi(ai);
+    void runPlan(legs, routePrefs, ai);
+  };
+
+  // The AI planner's "Show trip on map" routes its itinerary through the exact
+  // same multi-leg OTP flow as the manual Plan trip button.
+  const handleShowAiTrip = (legs: TripLeg[]) => {
+    setAiList(null);
+    handleShowRoute(legs, true);
   };
 
   // Re-run the current trip when the user changes mode filters; each leg keeps
   // its own timing.
   const handlePrefsChange = (next: RoutePrefs) => {
     setRoutePrefs(next);
-    if (tripLegs) void runPlan(tripLegs, next);
-  };
-
-  // For now the travel agent's timed itinerary is surfaced as a toast only —
-  // nothing is drawn on the map yet.
-  const handleAiItinerary = (data: ItineraryData) => {
-    if (data.stops.length === 0) return;
-    const notices = formatGapNotices(data);
-    const message = notices.length > 0 ? `${formatItinerarySummary(data)}\n\n${notices.join('\n')}` : formatItinerarySummary(data);
-    setToast({ title: 'AI itinerary', message, tone: 'plan' });
-    window.setTimeout(() => setToast(null), notices.length > 0 ? 22000 : 15000);
-  };
-
-  const handleShowAiStops = (places: SavedLocation[]) => {
-    setDestination(null);
-    setViewedList(null);
-    clearRoute();
-    setAiStops(places);
-    setAiList(null);
+    if (tripLegs) void runPlan(tripLegs, next, routeIsAi);
   };
 
   const handleGetDirections = (place: SavedLocation) => {
@@ -248,6 +260,15 @@ function App() {
     const opt = plan?.options[plan.selected];
     return opt && opt.legs.length > 0 ? opt.legs : null;
   }, [legPlans, activeLeg]);
+
+  // Total trip duration across the chosen itinerary for each leg, shown as a
+  // banner at the top-center of the map.
+  const tripTotalDuration = useMemo<number | null>(() => {
+    if (!legPlans || legPlans.length === 0) return null;
+    const chosen = legPlans.map((plan) => plan.options[plan.selected]).filter(Boolean);
+    if (chosen.length === 0) return null;
+    return chosen.reduce((sum, opt) => sum + opt.duration, 0);
+  }, [legPlans]);
 
   if (error && !position) {
     return <div className="p-4 bg-red-100 text-red-700">{error}</div>;
@@ -376,6 +397,19 @@ function App() {
         </button>
       )}
 
+      {tripTotalDuration != null && (
+        <div className="pointer-events-none absolute top-3 left-1/2 z-[1000] -translate-x-1/2 font-sans">
+          <div className="flex items-center gap-2 rounded-full bg-white dark:bg-[#2a2a2e] px-4 py-2 shadow-[0_1px_4px_rgba(0,0,0,0.3)]">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6]">
+              Total
+            </span>
+            <span className="text-[15px] font-semibold text-[#202124] dark:text-[#e8eaed]">
+              {fmtTripDuration(tripTotalDuration)}
+            </span>
+          </div>
+        </div>
+      )}
+
       {(legPlans || routing || routeError) && tripLegs && (
         <ItineraryOptions
           legPlans={legPlans ?? []}
@@ -406,25 +440,9 @@ function App() {
           <AiTripPlanner
             list={aiList}
             onClose={() => setAiList(null)}
-            onShowOnMap={handleShowAiStops}
-            onItinerary={handleAiItinerary}
+            onShowTrip={handleShowAiTrip}
           />
         </Suspense>
-      )}
-
-      {aiStops && aiStops.length > 0 && (
-        <button
-          type="button"
-          onClick={() => setAiStops(null)}
-          className="absolute top-3 right-3 z-[1000] flex items-center gap-2 h-10 pl-4 pr-3 bg-white dark:bg-[#2a2a2e] rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#202124] dark:text-[#e8eaed] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
-          aria-label="Clear AI itinerary pins"
-        >
-          <Sparkles size={16} className="text-[#7b1fa2]" />
-          <span>AI itinerary</span>
-          <span className="flex items-center justify-center rounded-full p-1 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]">
-            <X size={16} />
-          </span>
-        </button>
       )}
 
       {pickerPlace && (
@@ -469,7 +487,6 @@ function App() {
         tripStops={tripStops}
         otpLegs={otpLegs}
         routing={routing}
-        aiStops={aiStops}
         showCorridors={showCorridors}
         theme={theme}
         onBboxChange={setBbox}

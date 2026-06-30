@@ -106,6 +106,215 @@ async function getTravelMatrixMinutes(places) {
   }
 }
 
+// (haversineKm is defined in the OTP routing section below; declarations hoist.)
+
+// Mirror of the client's name heuristic so dining venues get anchored even when
+// the client didn't flag them. We primarily trust the client's `isFood`.
+const SERVER_FOOD_RE =
+  /\b(restaurant|cafe|café|coffee|bistro|diner|grill|eatery|kitchen|cuisine|sushi|ramen|noodle|pizz|pasta|spaghetti|burger|taco|taqueria|curry|kebab|shawarma|dumpling|hotpot|pho|bbq|steakhouse|chophouse|smokehouse|seafood|oyster|tavern|pub|gastropub|teahouse|tea house|bakery|patisserie|brewery|izakaya|trattoria|osteria|cantina|deli|brasserie)\b/i;
+function isDiningPlace(p) {
+  return Boolean(p?.isFood) || SERVER_FOOD_RE.test(p?.name || '');
+}
+
+const pad2 = (n) => String(n).padStart(2, '0');
+const toLocalIso = (d) =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+
+// Align clock times to a tidy 15-minute grid by always rounding UP (so e.g. a
+// stop that would end at :50 ends at the next :00, and we never under-allot
+// time). Dwell and travel are likewise ceil'd to a multiple of 15 minutes.
+const Q = 15 * 60000;
+const ceil15 = (ms) => Math.ceil(ms / Q) * Q;
+const ceil15min = (m) => Math.max(15, Math.ceil(m / 15) * 15);
+
+// "2026-06-30T15:30" -> "3:30 PM" (reads the clock straight off the ISO-local
+// string, so it's independent of the server's timezone).
+function fmtClockIso(iso) {
+  const m = /T(\d{2}):(\d{2})/.exec(iso || '');
+  if (!m) return '';
+  let h = Number(m[1]);
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${m[2]} ${ap}`;
+}
+
+// Render the final, scheduled itinerary as Markdown WITH clock times, reusing
+// the model's per-stop tip (note) for flavor. Order matches the schedule.
+function buildItineraryMarkdown(stops, intro) {
+  const lead = intro && intro.length <= 200 ? intro : "Here's your itinerary:";
+  const items = stops.map((s, i) => {
+    // Two trailing spaces force a Markdown hard break so the tip sits on its
+    // own line under the name/time.
+    const tip = s.note ? `  \n   _${s.note}_` : '';
+    return `${i + 1}. **${s.name}** · ${fmtClockIso(s.arriveTime)} – ${fmtClockIso(s.departTime)}${tip}`;
+  });
+  return `${lead}\n\n${items.join('\n')}`;
+}
+
+/**
+ * Deterministically schedule the itinerary the model proposed. The model is
+ * unreliable at honoring meal windows, filling idle gaps, and the window end,
+ * so we take only its CHOSEN places + dwell times and recompute the schedule:
+ *
+ *  - Meals (dining venues) are anchored to their preferred time ±30 min.
+ *  - Sightseeing stops are packed (in the model's order) into the time AROUND
+ *    the meals — including the gap before a meal — using real travel times, so
+ *    we don't leave a big idle gap before dinner while a later stop sits after it.
+ *  - Nothing is scheduled past the window end; stops that no longer fit are
+ *    omitted and reported.
+ *
+ * Returns { stops, omittedPlaces } or null if it can't schedule anything (the
+ * caller then falls back to the model's own JSON).
+ */
+function scheduleItinerary({ places, travelMatrix, mealTimes, start, end, modelStops }) {
+  const placeById = new Map(places.map((p) => [String(p.id), p]));
+  const idxById = new Map(places.map((p, i) => [String(p.id), i]));
+  const datePart = String(start).slice(0, 10);
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end).getTime();
+  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs <= startMs) return null;
+
+  // Travel time, ceil'd to the next 15 minutes so arrivals land on the grid.
+  const travelMin = (idA, idB) => {
+    const i = idxById.get(String(idA));
+    const j = idxById.get(String(idB));
+    const v = i != null && j != null ? travelMatrix?.[i]?.[j] : null;
+    if (v != null) return ceil15min(v);
+    const a = placeById.get(String(idA));
+    const b = placeById.get(String(idB));
+    if (!a || !b) return 15;
+    const km = haversineKm(a, b); // ~1.4x route distance @ ~20 km/h transit
+    return ceil15min(km * 4.2);
+  };
+
+  // We consider EVERY selected place — not just the ones the model chose to
+  // include — and let this scheduler decide what actually fits the window. The
+  // model is used only for hints: per-place dwell, the tip (note), and a rough
+  // visit order. (Trusting the model's own omissions dropped places that
+  // clearly fit a large window.)
+  const modelById = new Map();
+  (Array.isArray(modelStops) ? modelStops : []).forEach((s, i) => {
+    const key = String(s.id);
+    if (!modelById.has(key)) modelById.set(key, { ...s, _order: i });
+  });
+  const included = places.map((p) => {
+    const ms = modelById.get(String(p.id));
+    const dining = isDiningPlace(p);
+    let dwell = ms ? Math.round(Number(ms.durationMinutes) || 0) : 0;
+    if (!dwell && ms?.arriveTime && ms?.departTime) {
+      const d = (new Date(ms.departTime).getTime() - new Date(ms.arriveTime).getTime()) / 60000;
+      if (d > 0) dwell = Math.round(d);
+    }
+    if (!dwell) dwell = dining ? 60 : 45;
+    dwell = ceil15min(dwell); // round dwell up to a multiple of 15
+    if (dining) dwell = Math.min(dwell, 90);
+    return {
+      id: String(p.id),
+      name: p.name,
+      dwell,
+      note: ms ? String(ms.note || '') : '',
+      dining,
+      order: ms ? ms._order : Number.MAX_SAFE_INTEGER, // model-omitted go last
+    };
+  });
+  // Keep the model's relative order, appending any places it skipped.
+  included.sort((a, b) => a.order - b.order);
+  if (included.length === 0) return null;
+
+  const sights = included.filter((s) => !s.dining);
+  const diners = included.filter((s) => s.dining);
+
+  // Feasible meal slots: preferred time ±30 min, when that window overlaps the
+  // available window.
+  const lunchPref = mealTimes ? mealTimes.lunch : '12:00';
+  const dinnerPref = mealTimes ? mealTimes.dinner : '18:00';
+  const mealDefs = [];
+  const addMeal = (key, hhmm) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || '');
+    if (!m) return;
+    const target = new Date(`${datePart}T${pad2(+m[1])}:${pad2(+m[2])}`).getTime();
+    const openMs = target - 30 * 60000;
+    const closeMs = target + 30 * 60000;
+    if (closeMs < startMs || openMs > endMs) return; // window doesn't overlap
+    mealDefs.push({ key, targetMs: target, openMs, closeMs });
+  };
+  addMeal('lunch', lunchPref);
+  addMeal('dinner', dinnerPref);
+  mealDefs.sort((a, b) => a.targetMs - b.targetMs);
+
+  // Assign dining venues (model order) to slots (chronological); extras omitted.
+  const mealEvents = [];
+  for (let i = 0; i < Math.min(diners.length, mealDefs.length); i++) {
+    mealEvents.push({ ...mealDefs[i], stop: diners[i] });
+  }
+  const omitted = diners.slice(mealDefs.length).map((d) => d.name);
+
+  // Forward greedy schedule.
+  const scheduled = [];
+  let cursor = startMs;
+  let prevId = null;
+  const sightQ = [...sights];
+  // Arrivals always round UP to the next 15-min mark (and never before the
+  // window start), so every clock time is tidy and we never under-allot time.
+  const gridArrive = (rawMs) => ceil15(rawMs);
+  const pushStop = (stop, arriveMs) => {
+    const departMs = arriveMs + stop.dwell * 60000; // dwell is on the grid too
+    scheduled.push({
+      id: stop.id,
+      name: stop.name,
+      arriveTime: toLocalIso(new Date(arriveMs)),
+      departTime: toLocalIso(new Date(departMs)),
+      durationMinutes: stop.dwell,
+      note: stop.note,
+    });
+    prevId = stop.id;
+    cursor = departMs;
+  };
+
+  // Place the first sight (in order) that still fits before `limitMs`; returns
+  // true if one was placed. Skipping a too-big sight lets a smaller later one
+  // fill the slot instead of blocking the rest.
+  const placeFirstFitting = (limitMs, toMealId) => {
+    for (let k = 0; k < sightQ.length; k++) {
+      const s = sightQ[k];
+      const arrive = gridArrive(cursor + (prevId ? travelMin(prevId, s.id) : 0) * 60000);
+      const depart = arrive + s.dwell * 60000;
+      const tail = toMealId ? travelMin(s.id, toMealId) * 60000 : 0;
+      if (depart + tail <= limitMs) {
+        sightQ.splice(k, 1);
+        pushStop(s, arrive);
+        return true;
+      }
+    }
+    return false;
+  };
+
+  for (const meal of mealEvents) {
+    // Fill sights into the time before the meal (each must leave room to then
+    // reach the meal by the end of its window).
+    while (placeFirstFitting(meal.closeMs, meal.stop.id));
+    // Place the meal: prefer its target time, never before we can reach it,
+    // always within the ±30 window, on the 15-min grid.
+    const reach = gridArrive(cursor + (prevId ? travelMin(prevId, meal.stop.id) : 0) * 60000);
+    let arrive = Math.max(reach, meal.targetMs);
+    if (arrive < meal.openMs) arrive = meal.openMs;
+    if (arrive > meal.closeMs) arrive = meal.closeMs;
+    pushStop(meal.stop, ceil15(arrive));
+  }
+
+  // Remaining sights after the last meal, until the window end.
+  while (placeFirstFitting(endMs, null));
+  omitted.push(...sightQ.map((s) => s.name));
+
+  // Report every selected place we couldn't schedule.
+  const schedIds = new Set(scheduled.map((s) => s.id));
+  for (const p of places) {
+    if (!schedIds.has(String(p.id)) && !omitted.includes(p.name)) omitted.push(p.name);
+  }
+  if (scheduled.length === 0) return null;
+  return { stops: scheduled, omittedPlaces: omitted };
+}
+
 function buildMessages({ places, start, end, travelMatrix, mealTimes }) {
   const placeLines = places
     .map((p, i) => `${i + 1}. [id: ${p.id}] ${p.name}${p.address ? ` (${p.address})` : ''} [lat ${p.lat}, lon ${p.lon}]`)
@@ -117,24 +326,37 @@ function buildMessages({ places, start, end, travelMatrix, mealTimes }) {
   // detected food it sends explicit prefs (respecting meals the user turned
   // off); otherwise we fall back to sensible default meal times.
   const flaggedFood = places.filter((p) => p.isFood).map((p) => p.name);
-  const lunch = mealTimes ? mealTimes.lunch : '12:30';
-  const dinner = mealTimes ? mealTimes.dinner : '18:30';
+  const lunch = mealTimes ? mealTimes.lunch : '12:00';
+  const dinner = mealTimes ? mealTimes.dinner : '18:00';
+  // A meal may start within ±30 min of the preferred time. Compute the literal
+  // window edges so the prompt states concrete clock times.
+  const windowFor = (hhmm) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || '');
+    if (!m) return null;
+    const mins = Number(m[1]) * 60 + Number(m[2]);
+    const fmt = (x) => `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`;
+    return `${fmt(mins - 30)}–${fmt(mins + 30)}`;
+  };
+  const lunchWin = windowFor(lunch);
+  const dinnerWin = windowFor(dinner);
   const mealSection = [
     'DINING / MEAL SCHEDULING — follow carefully:',
     'First, identify every dining venue among the places — anything whose name indicates food or drink (restaurant, cafe, diner, bistro, grill, pizzeria, sushi/ramen/pho/taco/curry spot, steakhouse, bakery, bar/pub, etc.).' +
       (flaggedFood.length ? ` Known dining venues include: ${flaggedFood.join(', ')}.` : ''),
     'Dining venues are MEAL ANCHORS. Schedule each meal venue FIRST at its meal time, then arrange the non-dining places into the time around the meals.',
-    'MEAL WINDOWS: lunch MUST START between 11:00 and 13:00; dinner MUST START between 17:00 and 19:00.',
+    `MEAL WINDOWS (HARD CONSTRAINT): a dining venue MUST start within ±30 minutes of the preferred meal time${lunchWin ? ` — lunch within ${lunchWin}` : ''}${dinnerWin ? `${lunchWin ? ', ' : ' — '}dinner within ${dinnerWin}` : ''}. It is FORBIDDEN to start a dining venue at any other time.`,
+    'NO MEAL may last longer than 90 minutes — keep each dining venue\'s dwell time at 90 minutes or less.',
+    'A meal is only possible if its window overlaps the AVAILABLE time window. If the available window starts after the lunch window, there is no lunch — the only meal is dinner. Put each dining venue in the FIRST meal window the available time actually covers.',
     lunch
-      ? `If a dining venue is included, aim for lunch to start near ${lunch}, but always within the 11:00–13:00 window.`
+      ? `If lunch is possible, schedule it as close to ${lunch} as you can${lunchWin ? ` (anywhere in ${lunchWin})` : ''}.`
       : 'The user does NOT want a scheduled lunch — do not place a midday meal.',
     dinner
-      ? `If a dining venue is included, aim for dinner to start near ${dinner}, but always within the 17:00–19:00 window.`
+      ? `If dinner is possible, schedule it as close to ${dinner} as you can${dinnerWin ? ` (anywhere in ${dinnerWin})` : ''}.`
       : 'The user does NOT want a scheduled dinner — do not place an evening meal.',
-    'SPACE THE MEALS OUT: if lunch runs late (toward 13:00), schedule dinner toward the later end of its window — never put dinner at 17:00 right after a 13:00 lunch.',
+    'NON-DINING places must NOT occupy a meal window that a dining venue still needs. Leave the meal window free for the restaurant and schedule sightseeing before/after it (even if that means a non-dining stop sits idle-adjacent).',
+    `WORKED EXAMPLE: available window 15:00–21:00 with one restaurant and two sights, dinner preferred 18:00 → lunch is impossible (window already passed), so the restaurant is DINNER at ~18:00${dinnerWin ? ` (within ${dinnerWin})` : ''} for at most 90 minutes; the two sights go before and/or after it, and the restaurant is NOT placed at 15:35.`,
     'FILL BIG GAPS: anchoring a meal to its window can leave a large empty gap before it. Do NOT leave an idle gap longer than ~45 minutes between consecutive stops — if anchoring creates one, slot another (non-meal) place into that gap, reordering the route as needed, instead of waiting idle. Only leave a long gap if no remaining place can fill it.',
-    'NEVER schedule a restaurant outside these windows (e.g., a meal at 2:51pm or 9pm). A dining venue MUST land in its meal window. If neither window fits a dining venue inside the available time, OMIT that venue (record it in omittedPlaces) rather than dropping it into a random slot.',
-    'If there are more dining venues than meal slots that fit, keep the best-fitting ones in the windows and omit the rest.',
+    'If a dining venue cannot fit any meal window inside the available time, OMIT it (record it in omittedPlaces) rather than scheduling it outside a window. If there are more dining venues than meal slots that fit, keep the best-fitting ones in the windows and omit the rest.',
     '',
   ].join('\n');
 
@@ -250,7 +472,7 @@ app.post('/api/plan-trip', async (req, res) => {
     hfRes = await fetchHfWithRetry({
       model: HF_MODEL,
       messages: buildMessages({ places, start, end, travelMatrix, mealTimes }),
-      temperature: 0.3,
+      temperature: 0.1,
       max_tokens: 1024,
       stream: true,
     });
@@ -265,16 +487,16 @@ app.post('/api/plan-trip', async (req, res) => {
     return res.status(502).json({ error: `Hugging Face request failed (${hfRes.status}).`, detail });
   }
 
-  // Stream tokens to the client as Server-Sent Events.
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders?.();
-
+  // Buffer the full model output (requests are fast, ~5-10s). The model is
+  // unreliable at meal windows / gaps / the window end, so we don't show its
+  // schedule directly: we recompute it deterministically, then emit a single
+  // payload — Markdown WITH 15-min-aligned clock times plus the matching hidden
+  // JSON (which drives the routed map legs). No token-by-token streaming.
   const decoder = new TextDecoder();
   let buffer = '';
+  let assembled = '';
 
-  try {
+  const readModelOutput = async () => {
     for await (const chunk of hfRes.body) {
       buffer += decoder.decode(chunk, { stream: true });
       const lines = buffer.split('\n');
@@ -283,26 +505,50 @@ app.post('/api/plan-trip', async (req, res) => {
         const trimmed = line.trim();
         if (!trimmed.startsWith('data:')) continue;
         const payload = trimmed.slice(5).trim();
-        if (payload === '[DONE]') {
-          res.write('data: [DONE]\n\n');
-          res.end();
-          return;
-        }
+        if (payload === '[DONE]') return;
         try {
-          const json = JSON.parse(payload);
-          const delta = json?.choices?.[0]?.delta?.content;
-          if (delta) res.write(`data: ${JSON.stringify({ delta })}\n\n`);
+          const delta = JSON.parse(payload)?.choices?.[0]?.delta?.content;
+          if (delta) assembled += delta;
         } catch {
           // ignore keep-alive comments / partial frames
         }
       }
     }
+  };
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  try {
+    await readModelOutput();
+
+    const jsonIdx = assembled.search(/```json/i);
+    const modelMd = (jsonIdx >= 0 ? assembled.slice(0, jsonIdx) : assembled).trim();
+
+    let finalText = assembled; // fallback: emit the model's own output verbatim
+    try {
+      const match = assembled.match(/```json\s*([\s\S]*?)```/i);
+      const modelData = match ? JSON.parse(match[1]) : null;
+      if (modelData && Array.isArray(modelData.stops)) {
+        const scheduled = scheduleItinerary({ places, travelMatrix, mealTimes, start, end, modelStops: modelData.stops });
+        if (scheduled) {
+          const introMatch = modelMd.match(/^([\s\S]*?)(?:\n\s*1[.)]|\n\s*[-*]\s)/);
+          const intro = (introMatch ? introMatch[1] : modelMd.split('\n')[0] || '').trim();
+          const md = buildItineraryMarkdown(scheduled.stops, intro);
+          finalText = `${md}\n\n\`\`\`json\n${JSON.stringify(scheduled)}\n\`\`\``;
+        }
+      }
+    } catch (err) {
+      console.error('[plan-trip] Scheduling failed, using model output:', err);
+    }
+
+    res.write(`data: ${JSON.stringify({ delta: finalText })}\n\n`);
     res.write('data: [DONE]\n\n');
     res.end();
   } catch (err) {
     console.error('[plan-trip] Stream error:', err);
-    // If nothing was sent yet we could still send JSON, but headers are flushed,
-    // so emit an SSE error event instead.
     res.write(`data: ${JSON.stringify({ error: 'Stream interrupted.' })}\n\n`);
     res.end();
   }

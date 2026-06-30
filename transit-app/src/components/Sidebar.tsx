@@ -90,7 +90,7 @@ export default function Sidebar({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto py-2 text-[#202124] dark:text-[#e8eaed]">
+        <div className="themed-scroll flex-1 overflow-y-auto py-2 text-[#202124] dark:text-[#e8eaed]">
           {/* Saved */}
           <SectionHeader icon={<Star size={16} className="text-[#1a73e8]" />} title="Saved" />
           {savedPlaces.saved.length === 0 ? (

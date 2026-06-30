@@ -1,4 +1,4 @@
-import type { SavedLocation } from '../types/location';
+import type { SavedLocation, TripLeg } from '../types/location';
 
 /** Preferred meal times (24h "HH:mm"), passed to the agent for scheduling. */
 export interface MealTimes {
@@ -166,73 +166,6 @@ export function parseItineraryData(text: string): ItineraryData | null {
   }
 }
 
-/** Format an ISO-local "YYYY-MM-DDTHH:mm" as a short clock time, e.g. "2:05 PM". */
-function fmtClock(iso?: string): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
-/**
- * A compact, ordered summary of the timed itinerary for display in a toast:
- * one line per stop with its arrive→depart window (falling back to dwell time
- * when the agent didn't schedule clock times).
- */
-export function formatItinerarySummary(data: ItineraryData): string {
-  return data.stops
-    .map((stop, i) => {
-      const arrive = fmtClock(stop.arriveTime);
-      const depart = fmtClock(stop.departTime);
-      const when = arrive && depart ? `${arrive} – ${depart}` : `${stop.durationMinutes} min`;
-      return `${i + 1}. ${stop.name} · ${when}`;
-    })
-    .join('\n');
-}
-
-function fmtGap(mins: number): string {
-  if (mins < 60) return `${mins} min`;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m === 0 ? `${h} h` : `${h} h ${m} min`;
-}
-
-// Label a stop by meal if its arrival lands in a meal window, else by name.
-function gapTargetLabel(stop: ItineraryStop): string {
-  if (stop.arriveTime) {
-    const d = new Date(stop.arriveTime);
-    if (!Number.isNaN(d.getTime())) {
-      const mins = d.getHours() * 60 + d.getMinutes();
-      if (mins >= 11 * 60 && mins <= 13 * 60) return 'lunch';
-      if (mins >= 17 * 60 && mins <= 19 * 60) return 'dinner';
-    }
-  }
-  return stop.name;
-}
-
-/**
- * Notices about large idle gaps the agent couldn't fill, e.g. before a meal
- * that had to be anchored to its window. Suggests the user add another stop.
- */
-export function formatGapNotices(data: ItineraryData, thresholdMin = 60): string[] {
-  const notices: string[] = [];
-  for (let i = 1; i < data.stops.length; i++) {
-    const prev = data.stops[i - 1];
-    const cur = data.stops[i];
-    if (!prev.departTime || !cur.arriveTime) continue;
-    const dep = new Date(prev.departTime).getTime();
-    const arr = new Date(cur.arriveTime).getTime();
-    if (Number.isNaN(dep) || Number.isNaN(arr)) continue;
-    const gap = Math.round((arr - dep) / 60000);
-    if (gap >= thresholdMin) {
-      notices.push(
-        `There's a ${fmtGap(gap)} gap between ${prev.name} and ${gapTargetLabel(cur)} — consider adding another stop.`,
-      );
-    }
-  }
-  return notices;
-}
-
 /** Resolve the parsed stops back to the chosen SavedLocations, preserving order. */
 export function resolveStops(data: ItineraryData, chosen: SavedLocation[]): SavedLocation[] {
   const byId = new Map(chosen.map((p) => [p.id, p]));
@@ -243,4 +176,33 @@ export function resolveStops(data: ItineraryData, chosen: SavedLocation[]): Save
     if (place && !resolved.some((r) => r.id === place.id)) resolved.push(place);
   }
   return resolved;
+}
+
+/**
+ * Turn the agent's ordered itinerary into trip legs between consecutive stops,
+ * so it can be routed through OTP exactly like a manually-planned trip. Each
+ * leg departs at the previous stop's scheduled departure time.
+ */
+export function buildItineraryLegs(data: ItineraryData, chosen: SavedLocation[]): TripLeg[] {
+  const byId = new Map(chosen.map((p) => [p.id, p]));
+  const byName = new Map(chosen.map((p) => [p.primaryText.toLowerCase(), p]));
+  const seq: { place: SavedLocation; depart?: string }[] = [];
+  for (const stop of data.stops) {
+    const place = byId.get(stop.id) ?? byName.get((stop.name ?? '').toLowerCase());
+    if (place && (seq.length === 0 || seq[seq.length - 1].place.id !== place.id)) {
+      seq.push({ place, depart: stop.departTime });
+    }
+  }
+  const legs: TripLeg[] = [];
+  for (let i = 0; i < seq.length - 1; i++) {
+    legs.push({
+      id: `ai_leg_${i}_${seq[i].place.id}`,
+      from: seq[i].place,
+      to: seq[i + 1].place,
+      // Leave each stop at its scheduled departure time (falls back to "now").
+      whenMode: seq[i].depart ? 'leave' : 'now',
+      whenValue: seq[i].depart,
+    });
+  }
+  return legs;
 }

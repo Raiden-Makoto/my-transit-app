@@ -215,9 +215,8 @@ function MapConstraints() {
   useEffect(() => {
     map.setMinZoom(MIN_ZOOM);
     if (map.getZoom() < MIN_ZOOM) map.setZoom(MIN_ZOOM);
-    // Hard wall at the region edges (viscosity 1.0 = no overscroll past it).
+    // Hard wall at the region edges (viscosity comes from the MapContainer prop).
     map.setMaxBounds(MAX_BOUNDS);
-    map.options.maxBoundsViscosity = 1.0;
   }, [map]);
   return null;
 }
@@ -252,7 +251,6 @@ interface MapViewProps {
   tripStops: SavedLocation[];
   otpLegs: OtpLeg[] | null;
   routing: boolean;
-  aiStops: SavedLocation[] | null;
   showCorridors: boolean;
   theme: 'light' | 'dark';
   onBboxChange: (bbox: Bbox) => void;
@@ -271,7 +269,6 @@ export default function MapView({
   tripStops,
   otpLegs,
   routing,
-  aiStops,
   showCorridors,
   theme,
   onBboxChange,
@@ -408,20 +405,6 @@ export default function MapView({
       ))}
       {otpPoints.length === 0 && tripStops.length > 0 && <FitBounds places={tripStops} />}
 
-      {aiStops?.map((stop, i) => (
-        <Marker key={`ai_${stop.id}_${i}`} position={[stop.lat, stop.lon]} icon={numberedPinIcon(i + 1)}>
-          <Popup>
-            <strong>{stop.primaryText}</strong>
-            {stop.secondaryText && (
-              <>
-                <br />
-                {stop.secondaryText}
-              </>
-            )}
-          </Popup>
-        </Marker>
-      ))}
-      {aiStops && aiStops.length > 0 && <FitBounds places={aiStops} />}
       <RecenterMap coords={mapCenter} />
     </MapContainer>
   );

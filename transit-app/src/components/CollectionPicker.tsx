@@ -55,7 +55,7 @@ export default function CollectionPicker({ place, collections, onClose }: Collec
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto py-1">
+        <div className="themed-scroll flex-1 overflow-y-auto py-1">
           {lists.length === 0 && (
             <p className="px-4 py-3 text-[14px] text-[#5f6368]">No lists yet. Create one below.</p>
           )}

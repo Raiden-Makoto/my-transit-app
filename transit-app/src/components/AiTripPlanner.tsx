@@ -5,13 +5,12 @@ import {
   streamPlanTrip,
   displayMarkdown,
   parseItineraryData,
-  resolveStops,
+  buildItineraryLegs,
   omittedNote,
   isFoodPlace,
-  type ItineraryData,
   type MealTimes,
 } from '../services/planTrip';
-import type { PlaceCollection, SavedLocation } from '../types/location';
+import type { PlaceCollection, TripLeg } from '../types/location';
 
 // Format a Date as a value for <input type="datetime-local"> in local time.
 function toLocalInput(date: Date): string {
@@ -19,6 +18,16 @@ function toLocalInput(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
     date.getMinutes(),
   )}`;
+}
+
+// Round a Date UP to the next 15-minute mark, so the default window sits on the
+// same tidy grid the scheduler uses.
+function ceilTo15(date: Date): Date {
+  const d = new Date(date);
+  d.setSeconds(0, 0);
+  const r = d.getMinutes() % 15;
+  if (r !== 0) d.setMinutes(d.getMinutes() + (15 - r));
+  return d;
 }
 
 const markdownComponents: Components = {
@@ -35,18 +44,18 @@ const markdownComponents: Components = {
 type AiTripPlannerProps = {
   list: PlaceCollection | null;
   onClose: () => void;
-  onShowOnMap: (places: SavedLocation[]) => void;
-  /** Called with the parsed, timed itinerary once planning completes. */
-  onItinerary?: (data: ItineraryData) => void;
+  /** Route the planned itinerary on the map (same flow as the Plan trip button). */
+  onShowTrip: (legs: TripLeg[]) => void;
 };
 
-export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary }: AiTripPlannerProps) {
+export default function AiTripPlanner({ list, onClose, onShowTrip }: AiTripPlannerProps) {
   const { nowInput, defaultEndInput, minMs, maxMs } = useMemo(() => {
     const now = new Date();
     const maxDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 1 week ahead
-    const defaultEnd = new Date(now.getTime() + 9 * 60 * 60 * 1000); // +9h, clamped
+    const startDefault = ceilTo15(now); // snap to the 15-min grid
+    const defaultEnd = new Date(startDefault.getTime() + 9 * 60 * 60 * 1000); // +9h, clamped
     return {
-      nowInput: toLocalInput(now),
+      nowInput: toLocalInput(startDefault),
       defaultEndInput: toLocalInput(defaultEnd < maxDate ? defaultEnd : maxDate),
       minMs: now.getTime(),
       maxMs: maxDate.getTime(),
@@ -57,13 +66,13 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
   const [start, setStart] = useState(nowInput);
   const [end, setEnd] = useState(defaultEndInput);
   const [lunchEnabled, setLunchEnabled] = useState(true);
-  const [lunchTime, setLunchTime] = useState('12:30');
+  const [lunchTime, setLunchTime] = useState('12:00');
   const [dinnerEnabled, setDinnerEnabled] = useState(true);
-  const [dinnerTime, setDinnerTime] = useState('18:30');
+  const [dinnerTime, setDinnerTime] = useState('18:00');
   const [started, setStarted] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [text, setText] = useState('');
-  const [pins, setPins] = useState<SavedLocation[]>([]);
+  const [routeLegs, setRouteLegs] = useState<TripLeg[]>([]);
   const [omitted, setOmitted] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,13 +83,13 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
       setStart(nowInput);
       setEnd(defaultEndInput);
       setLunchEnabled(true);
-      setLunchTime('12:30');
+      setLunchTime('12:00');
       setDinnerEnabled(true);
-      setDinnerTime('18:30');
+      setDinnerTime('18:00');
       setStarted(false);
       setStreaming(false);
       setText('');
-      setPins([]);
+      setRouteLegs([]);
       setError(null);
     }
   }, [list, nowInput, defaultEndInput]);
@@ -124,7 +133,7 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
     setStarted(true);
     setStreaming(true);
     setText('');
-    setPins([]);
+    setRouteLegs([]);
     setOmitted([]);
     const mealTimes: MealTimes | undefined =
       foodPlaces.length > 0
@@ -132,11 +141,12 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
         : undefined;
     try {
       const full = await streamPlanTrip(chosen, start, end, setText, mealTimes);
+      // The server returns a deterministically-scheduled itinerary (meal
+      // windows, gap-filling, 15-min-aligned times), so we use it as-is.
       const data = parseItineraryData(full);
       if (data) {
-        setPins(resolveStops(data, chosen));
+        setRouteLegs(buildItineraryLegs(data, chosen));
         setOmitted(data.omittedPlaces);
-        onItinerary?.(data);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to plan trip.');
@@ -149,7 +159,7 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
     setStarted(false);
     setStreaming(false);
     setText('');
-    setPins([]);
+    setRouteLegs([]);
     setOmitted([]);
     setError(null);
   };
@@ -189,7 +199,7 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="themed-scroll flex-1 overflow-y-auto px-5 py-4">
           {started ? (
             <div>
               {streaming && !markdown && (
@@ -217,6 +227,7 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
                   <input
                     type="datetime-local"
                     value={start}
+                    step={900}
                     onChange={(e) => setStart(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-[#dadce0] px-3 py-2 text-[14px] text-[#202124] focus:border-[#7b1fa2] focus:outline-none"
                   />
@@ -226,6 +237,7 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
                   <input
                     type="datetime-local"
                     value={end}
+                    step={900}
                     onChange={(e) => setEnd(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-[#dadce0] px-3 py-2 text-[14px] text-[#202124] focus:border-[#7b1fa2] focus:outline-none"
                   />
@@ -266,6 +278,7 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
                         value={lunchTime}
                         min="11:00"
                         max="13:00"
+                        step={900}
                         disabled={!lunchEnabled}
                         onChange={(e) => setLunchTime(e.target.value)}
                         className="rounded-lg border border-[#dadce0] px-2 py-1 text-[14px] text-[#202124] focus:border-[#7b1fa2] focus:outline-none disabled:opacity-40"
@@ -291,6 +304,7 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
                         value={dinnerTime}
                         min="17:00"
                         max="19:00"
+                        step={900}
                         disabled={!dinnerEnabled}
                         onChange={(e) => setDinnerTime(e.target.value)}
                         className="rounded-lg border border-[#dadce0] px-2 py-1 text-[14px] text-[#202124] focus:border-[#7b1fa2] focus:outline-none disabled:opacity-40"
@@ -360,14 +374,17 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary 
                 <ArrowLeft size={16} />
                 Back
               </button>
-              {!streaming && pins.length > 0 && (
+              {!streaming && routeLegs.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => onShowOnMap(pins)}
+                  onClick={() => {
+                    onShowTrip(routeLegs);
+                    onClose();
+                  }}
                   className="flex items-center gap-2 rounded-full px-5 py-2 text-[14px] font-medium text-white bg-[#7b1fa2] hover:bg-[#6a1b9a]"
                 >
                   <MapIcon size={16} />
-                  Show on map
+                  Show trip on map
                 </button>
               )}
               <button

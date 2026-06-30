@@ -136,7 +136,7 @@ export default function TripPlanner({ open, onClose, viewport, onShowRoute, init
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="themed-scroll flex-1 overflow-y-auto p-4 space-y-4">
           {legs.map((leg, i) => (
             <div key={leg.id} className="rounded-xl border border-[#e0e0e0] dark:border-[#3a3a3e] p-3">
               <div className="flex items-center justify-between mb-2">
