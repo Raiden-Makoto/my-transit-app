@@ -190,6 +190,49 @@ export function formatItinerarySummary(data: ItineraryData): string {
     .join('\n');
 }
 
+function fmtGap(mins: number): string {
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h} h` : `${h} h ${m} min`;
+}
+
+// Label a stop by meal if its arrival lands in a meal window, else by name.
+function gapTargetLabel(stop: ItineraryStop): string {
+  if (stop.arriveTime) {
+    const d = new Date(stop.arriveTime);
+    if (!Number.isNaN(d.getTime())) {
+      const mins = d.getHours() * 60 + d.getMinutes();
+      if (mins >= 11 * 60 && mins <= 13 * 60) return 'lunch';
+      if (mins >= 17 * 60 && mins <= 19 * 60) return 'dinner';
+    }
+  }
+  return stop.name;
+}
+
+/**
+ * Notices about large idle gaps the agent couldn't fill, e.g. before a meal
+ * that had to be anchored to its window. Suggests the user add another stop.
+ */
+export function formatGapNotices(data: ItineraryData, thresholdMin = 60): string[] {
+  const notices: string[] = [];
+  for (let i = 1; i < data.stops.length; i++) {
+    const prev = data.stops[i - 1];
+    const cur = data.stops[i];
+    if (!prev.departTime || !cur.arriveTime) continue;
+    const dep = new Date(prev.departTime).getTime();
+    const arr = new Date(cur.arriveTime).getTime();
+    if (Number.isNaN(dep) || Number.isNaN(arr)) continue;
+    const gap = Math.round((arr - dep) / 60000);
+    if (gap >= thresholdMin) {
+      notices.push(
+        `There's a ${fmtGap(gap)} gap between ${prev.name} and ${gapTargetLabel(cur)} — consider adding another stop.`,
+      );
+    }
+  }
+  return notices;
+}
+
 /** Resolve the parsed stops back to the chosen SavedLocations, preserving order. */
 export function resolveStops(data: ItineraryData, chosen: SavedLocation[]): SavedLocation[] {
   const byId = new Map(chosen.map((p) => [p.id, p]));

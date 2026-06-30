@@ -7,7 +7,7 @@ import TripPlanner from './components/TripPlanner';
 import { legTiming } from './services/tripTiming';
 import MapView, { type Bbox } from './components/MapView';
 import ItineraryOptions from './components/ItineraryOptions';
-import { formatItinerarySummary, type ItineraryData } from './services/planTrip';
+import { formatItinerarySummary, formatGapNotices, type ItineraryData } from './services/planTrip';
 
 // Lazy-loaded so react-markdown only loads when the AI planner is opened.
 const AiTripPlanner = lazy(() => import('./components/AiTripPlanner'));
@@ -197,8 +197,10 @@ function App() {
   // nothing is drawn on the map yet.
   const handleAiItinerary = (data: ItineraryData) => {
     if (data.stops.length === 0) return;
-    setToast({ title: 'AI itinerary', message: formatItinerarySummary(data), tone: 'plan' });
-    window.setTimeout(() => setToast(null), 15000);
+    const notices = formatGapNotices(data);
+    const message = notices.length > 0 ? `${formatItinerarySummary(data)}\n\n${notices.join('\n')}` : formatItinerarySummary(data);
+    setToast({ title: 'AI itinerary', message, tone: 'plan' });
+    window.setTimeout(() => setToast(null), notices.length > 0 ? 22000 : 15000);
   };
 
   const handleShowAiStops = (places: SavedLocation[]) => {
