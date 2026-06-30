@@ -3,6 +3,10 @@ import type { SavedLocation } from '../types/location';
 export interface ItineraryStop {
   id: string;
   name: string;
+  /** Scheduled arrival, ISO 8601 local "YYYY-MM-DDTHH:mm" (may be absent). */
+  arriveTime?: string;
+  /** Scheduled departure, ISO 8601 local "YYYY-MM-DDTHH:mm" (may be absent). */
+  departTime?: string;
   durationMinutes: number;
   note: string;
 }
@@ -111,13 +115,45 @@ export function parseItineraryData(text: string): ItineraryData | null {
   try {
     const data = JSON.parse(match[1]);
     if (!Array.isArray(data?.stops)) return null;
+    const stops: ItineraryStop[] = data.stops.map((s: Partial<ItineraryStop>) => ({
+      id: String(s.id ?? ''),
+      name: String(s.name ?? ''),
+      arriveTime: typeof s.arriveTime === 'string' ? s.arriveTime : undefined,
+      departTime: typeof s.departTime === 'string' ? s.departTime : undefined,
+      durationMinutes: Number(s.durationMinutes ?? 0),
+      note: String(s.note ?? ''),
+    }));
     return {
-      stops: data.stops,
+      stops,
       omittedPlaces: Array.isArray(data.omittedPlaces) ? data.omittedPlaces : [],
     };
   } catch {
     return null;
   }
+}
+
+/** Format an ISO-local "YYYY-MM-DDTHH:mm" as a short clock time, e.g. "2:05 PM". */
+function fmtClock(iso?: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+/**
+ * A compact, ordered summary of the timed itinerary for display in a toast:
+ * one line per stop with its arrive→depart window (falling back to dwell time
+ * when the agent didn't schedule clock times).
+ */
+export function formatItinerarySummary(data: ItineraryData): string {
+  return data.stops
+    .map((stop, i) => {
+      const arrive = fmtClock(stop.arriveTime);
+      const depart = fmtClock(stop.departTime);
+      const when = arrive && depart ? `${arrive} – ${depart}` : `${stop.durationMinutes} min`;
+      return `${i + 1}. ${stop.name} · ${when}`;
+    })
+    .join('\n');
 }
 
 /** Resolve the parsed stops back to the chosen SavedLocations, preserving order. */

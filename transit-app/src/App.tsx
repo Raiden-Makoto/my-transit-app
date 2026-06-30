@@ -7,6 +7,7 @@ import TripPlanner from './components/TripPlanner';
 import { legTiming } from './services/tripTiming';
 import MapView, { type Bbox } from './components/MapView';
 import ItineraryOptions from './components/ItineraryOptions';
+import { formatItinerarySummary, type ItineraryData } from './services/planTrip';
 
 // Lazy-loaded so react-markdown only loads when the AI planner is opened.
 const AiTripPlanner = lazy(() => import('./components/AiTripPlanner'));
@@ -49,7 +50,9 @@ function App() {
   const [routing, setRouting] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routePrefs, setRoutePrefs] = useState<RoutePrefs>(DEFAULT_ROUTE_PREFS);
-  const [toast, setToast] = useState<{ message: string; tone: 'info' | 'error' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; tone: 'info' | 'error' | 'plan'; title?: string } | null>(
+    null,
+  );
   const [tripInitialLegs, setTripInitialLegs] = useState<TripLeg[] | null>(null);
   const [aiStops, setAiStops] = useState<SavedLocation[] | null>(null);
   const [showCorridors, setShowCorridors] = useState(true);
@@ -188,6 +191,14 @@ function App() {
   const handlePrefsChange = (next: RoutePrefs) => {
     setRoutePrefs(next);
     if (tripLegs) void runPlan(tripLegs, next);
+  };
+
+  // For now the travel agent's timed itinerary is surfaced as a toast only —
+  // nothing is drawn on the map yet.
+  const handleAiItinerary = (data: ItineraryData) => {
+    if (data.stops.length === 0) return;
+    setToast({ title: 'AI itinerary', message: formatItinerarySummary(data), tone: 'plan' });
+    window.setTimeout(() => setToast(null), 15000);
   };
 
   const handleShowAiStops = (places: SavedLocation[]) => {
@@ -390,7 +401,12 @@ function App() {
 
       {aiList && (
         <Suspense fallback={null}>
-          <AiTripPlanner list={aiList} onClose={() => setAiList(null)} onShowOnMap={handleShowAiStops} />
+          <AiTripPlanner
+            list={aiList}
+            onClose={() => setAiList(null)}
+            onShowOnMap={handleShowAiStops}
+            onItinerary={handleAiItinerary}
+          />
         </Suspense>
       )}
 
@@ -416,14 +432,21 @@ function App() {
       {toast && (
         <div
           role="status"
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1300] flex items-center gap-2.5 max-w-[90vw] rounded-lg px-4 py-2.5 shadow-[0_2px_10px_rgba(0,0,0,0.3)] font-sans text-[14px] bg-white text-[#202124] dark:bg-[#2a2a2e] dark:text-[#e8eaed]"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1300] flex items-start gap-2.5 max-w-[90vw] rounded-lg px-4 py-2.5 shadow-[0_2px_10px_rgba(0,0,0,0.3)] font-sans text-[14px] bg-white text-[#202124] dark:bg-[#2a2a2e] dark:text-[#e8eaed]"
         >
-          {toast.tone === 'info' ? (
-            <Loader2 size={16} className="shrink-0 animate-spin text-[#1a73e8]" />
-          ) : (
-            <span className="shrink-0 w-2 h-2 rounded-full bg-[#d93025]" />
-          )}
-          <span>{toast.message}</span>
+          <span className="mt-0.5 shrink-0">
+            {toast.tone === 'info' ? (
+              <Loader2 size={16} className="animate-spin text-[#1a73e8]" />
+            ) : toast.tone === 'plan' ? (
+              <Sparkles size={16} className="text-[#7b1fa2]" />
+            ) : (
+              <span className="inline-block w-2 h-2 rounded-full bg-[#d93025]" />
+            )}
+          </span>
+          <div className="min-w-0">
+            {toast.title && <div className="font-semibold">{toast.title}</div>}
+            <div className="whitespace-pre-line leading-relaxed">{toast.message}</div>
+          </div>
           <button
             type="button"
             onClick={() => setToast(null)}

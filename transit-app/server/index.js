@@ -162,9 +162,14 @@ function buildMessages({ places, start, end, travelMatrix }) {
     '1. A short, friendly Markdown itinerary: a brief intro sentence, then a numbered list where each item is "**Place name** — recommended duration" followed by a one-line tip. End right after the list — NO closing paragraph.',
     '2. AFTER the Markdown, output a fenced ```json code block (this will be hidden from the user) with this exact shape:',
     '```json',
-    '{ "stops": [ { "id": string, "name": string, "durationMinutes": number, "note": string } ], "omittedPlaces": [string] }',
+    '{ "stops": [ { "id": string, "name": string, "arriveTime": string, "departTime": string, "durationMinutes": number, "note": string } ], "omittedPlaces": [string] }',
     '```',
     'In the JSON: "id" MUST be the exact id given for that place; "stops" are the included places in visit order; durationMinutes is the recommended minutes spent there; "omittedPlaces" lists the names you left out (empty array if none).',
+    'TIMESTAMPS — schedule a concrete clock time for every stop:',
+    '- "arriveTime" and "departTime" MUST be ISO 8601 LOCAL strings of the form "YYYY-MM-DDTHH:mm" (no timezone suffix, no seconds), e.g. "2026-06-30T14:05".',
+    '- The first stop\'s arriveTime is at or after the window start; every departTime equals arriveTime plus that stop\'s durationMinutes.',
+    '- The next stop\'s arriveTime equals the previous stop\'s departTime PLUS the travel time between them (use the provided travel times). Leave any meal/buffer time as a gap between a departTime and the next arriveTime.',
+    '- Every arriveTime and departTime MUST fall within the given window (the last departTime is at or before the window end). These times are for the JSON only — still do NOT print clock times in the Markdown.',
     'The JSON stops and the numbered list must contain exactly the same places. Only use places from the provided list. Always put the JSON block last.',
   ].join('\n');
 

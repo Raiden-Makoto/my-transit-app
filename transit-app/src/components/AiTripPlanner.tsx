@@ -7,6 +7,7 @@ import {
   parseItineraryData,
   resolveStops,
   omittedNote,
+  type ItineraryData,
 } from '../services/planTrip';
 import type { PlaceCollection, SavedLocation } from '../types/location';
 
@@ -33,9 +34,11 @@ type AiTripPlannerProps = {
   list: PlaceCollection | null;
   onClose: () => void;
   onShowOnMap: (places: SavedLocation[]) => void;
+  /** Called with the parsed, timed itinerary once planning completes. */
+  onItinerary?: (data: ItineraryData) => void;
 };
 
-export default function AiTripPlanner({ list, onClose, onShowOnMap }: AiTripPlannerProps) {
+export default function AiTripPlanner({ list, onClose, onShowOnMap, onItinerary }: AiTripPlannerProps) {
   const { nowInput, defaultEndInput, minMs, maxMs } = useMemo(() => {
     const now = new Date();
     const maxDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 1 week ahead
@@ -116,6 +119,7 @@ export default function AiTripPlanner({ list, onClose, onShowOnMap }: AiTripPlan
       if (data) {
         setPins(resolveStops(data, chosen));
         setOmitted(data.omittedPlaces);
+        onItinerary?.(data);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to plan trip.');
