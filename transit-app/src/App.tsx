@@ -26,10 +26,10 @@ import { useTheme } from './hooks/useTheme';
 import type { SearchViewport } from './hooks/usePlaceSearch';
 import type { PlaceCollection, SavedLocation, TripLeg } from './types/location';
 
-// OTP often lists the direct walk first even when a transit trip is much
-// faster, so sort by duration to put the quickest option first.
+// Sort itineraries by departure time so the trip leaving soonest is at the top
+// (e.g. one leaving 10:05 ranks above one leaving 10:10).
 function rankItineraries(its: OtpItinerary[]): OtpItinerary[] {
-  return [...its].sort((a, b) => a.duration - b.duration);
+  return [...its].sort((a, b) => a.startTime - b.startTime);
 }
 
 // Drop walk-only itineraries longer than 15 minutes — nobody wants a 99-minute
@@ -166,13 +166,11 @@ function App() {
           { lat: leg.to!.lat, lon: leg.to!.lon },
           { ...baseOpts, ...legTiming(leg) },
         );
-        // AI itineraries are scheduled to depart at a specific time, so show the
-        // 3 options that leave soonest; manual trips show the 5 fastest. Either
-        // way, drop unreasonably long walk-only options first.
-        const usable = usableItineraries(itineraries);
-        const options = ai
-          ? [...usable].sort((a, b) => a.startTime - b.startTime).slice(0, 3)
-          : rankItineraries(usable).slice(0, 5);
+        // Sort by departure time so the soonest-leaving trip is first. AI trips
+        // show the top 3, manual trips the top 5. Either way, drop unreasonably
+        // long walk-only options first.
+        const usable = rankItineraries(usableItineraries(itineraries));
+        const options = ai ? usable.slice(0, 3) : usable.slice(0, 5);
         plans.push({
           id: leg.id,
           fromName: leg.from!.primaryText,

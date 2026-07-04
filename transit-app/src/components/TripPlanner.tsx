@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, Plus, Circle, MapPin, Trash2, Route } from 'lucide-react';
+import { X, Plus, Circle, MapPin, Trash2, Route, ArrowUpDown } from 'lucide-react';
 import LocationInput from './LocationInput';
 import type { SearchViewport } from '../hooks/usePlaceSearch';
 import type { SavedLocation, TripLeg, TripWhenMode } from '../types/location';
@@ -109,6 +109,11 @@ export default function TripPlanner({ open, onClose, viewport, onShowRoute, init
     setLegs((prev) => (prev.length > 1 ? prev.filter((leg) => leg.id !== id) : prev));
   };
 
+  // Swap a leg's start and destination (Google-Maps-style flip).
+  const swapEnds = (leg: TripLeg) => {
+    updateLeg(leg.id, { from: leg.to, to: leg.from });
+  };
+
   const completeLegs = legs.filter((leg) => leg.from && leg.to);
   const canShow = completeLegs.length > 0;
 
@@ -153,20 +158,34 @@ export default function TripPlanner({ open, onClose, viewport, onShowRoute, init
                 )}
               </div>
               <div className="space-y-2">
-                <LocationInput
-                  value={leg.from}
-                  onChange={(loc) => updateLeg(leg.id, { from: loc })}
-                  placeholder="Choose starting point"
-                  viewport={viewport}
-                  leadingIcon={<Circle size={16} />}
-                />
-                <LocationInput
-                  value={leg.to}
-                  onChange={(loc) => updateLeg(leg.id, { to: loc })}
-                  placeholder="Choose destination"
-                  viewport={viewport}
-                  leadingIcon={<MapPin size={16} />}
-                />
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 space-y-2">
+                    <LocationInput
+                      value={leg.from}
+                      onChange={(loc) => updateLeg(leg.id, { from: loc })}
+                      placeholder="Choose starting point"
+                      viewport={viewport}
+                      leadingIcon={<Circle size={16} />}
+                    />
+                    <LocationInput
+                      value={leg.to}
+                      onChange={(loc) => updateLeg(leg.id, { to: loc })}
+                      placeholder="Choose destination"
+                      viewport={viewport}
+                      leadingIcon={<MapPin size={16} />}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => swapEnds(leg)}
+                    disabled={!leg.from && !leg.to}
+                    className="shrink-0 rounded-full p-2 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e] disabled:opacity-40 disabled:cursor-not-allowed"
+                    aria-label={`Swap start and destination for leg ${i + 1}`}
+                    title="Swap start and destination"
+                  >
+                    <ArrowUpDown size={16} />
+                  </button>
+                </div>
 
                 <div className="flex rounded-lg bg-[#f1f3f4] dark:bg-[#3a3a3e] p-0.5 text-[12px] font-medium">
                   {(i === 0 ? WHEN_OPTIONS : WHEN_OPTIONS.filter((o) => o.mode !== 'now')).map(({ mode, label }) => (

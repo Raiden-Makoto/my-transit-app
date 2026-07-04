@@ -43,13 +43,17 @@ const MODE_COLOR: Record<string, string> = {
 };
 
 // Style a single OTP itinerary leg. Walking legs read as a dotted line; transit
-// legs use the GTFS route colour (falling back to a per-mode default).
+// legs use the GTFS route colour (falling back to a per-mode default). Note:
+// `dashArray` is set explicitly in BOTH branches. Leaflet's setStyle MERGES
+// options, so an omitted `dashArray` would keep a stale value from whatever leg
+// previously occupied the same polyline slot — making transit legs inherit the
+// walking dashes and render the whole trip as if it were on foot.
 function otpLegStyle(leg: OtpLeg): L.PathOptions {
   if (leg.mode === 'WALK') {
     return { color: '#5f6368', weight: 4, opacity: 0.95, dashArray: '1 8', lineCap: 'round' };
   }
   const color = leg.route?.color ? `#${leg.route.color}` : MODE_COLOR[leg.mode] ?? '#1a73e8';
-  return { color, weight: 6, opacity: 1 };
+  return { color, weight: 6, opacity: 1, dashArray: undefined, lineCap: 'butt' };
 }
 
 // A contrasting casing drawn beneath each leg so the active itinerary stands
