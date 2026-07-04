@@ -19,15 +19,13 @@ import {
 } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { HistoryApi } from '../hooks/useLocationHistory';
-import type { SavedPlacesApi } from '../hooks/useSavedPlaces';
-import { COLLECTION_PLACE_LIMIT, COLLECTION_COLORS, type CollectionsApi } from '../hooks/useCollections';
+import { COLLECTION_PLACE_LIMIT, COLLECTION_COLORS, FAVORITES_ID, type CollectionsApi } from '../hooks/useCollections';
 import { usePlaceSearch, type SearchViewport } from '../hooks/usePlaceSearch';
 import type { SavedLocation } from '../types/location';
 
 type SearchBoxProps = {
   onLocationSelect?: (location: SavedLocation) => void;
   viewport?: SearchViewport;
-  savedPlaces: SavedPlacesApi;
   collections: CollectionsApi;
   history: HistoryApi;
   onAddToList: (place: SavedLocation) => void;
@@ -42,7 +40,6 @@ function formatAddress(loc: SavedLocation): string {
 export default function SearchBox({
   onLocationSelect,
   viewport,
-  savedPlaces,
   collections,
   history,
   onAddToList,
@@ -50,7 +47,11 @@ export default function SearchBox({
   const [homeLoc, setHomeLoc] = useLocalStorage<SavedLocation | null>('user_home', null);
   const [workLoc, setWorkLoc] = useLocalStorage<SavedLocation | null>('user_work', null);
   const { recents, addToHistory, removeFromHistory } = history;
-  const { saved, isSaved, toggleSaved, removeSaved } = savedPlaces;
+  const isFavorite = (id: string) => collections.isPlaceInCollection(FAVORITES_ID, id);
+  const toggleFavorite = (place: SavedLocation) => {
+    if (isFavorite(place.id)) collections.removePlaceFromCollection(FAVORITES_ID, place.id);
+    else collections.addPlaceToCollection(FAVORITES_ID, place);
+  };
 
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
@@ -257,7 +258,7 @@ export default function SearchBox({
 
               {!loading &&
                 results.map((place) => {
-                  const starred = isSaved(place.id);
+                  const starred = isFavorite(place.id);
                   return (
                     <div
                       key={place.id}
@@ -291,11 +292,11 @@ export default function SearchBox({
                       <button
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => toggleSaved(place)}
+                        onClick={() => toggleFavorite(place)}
                         className={`ml-1 shrink-0 rounded-full p-1.5 transition-opacity hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e] ${
-                          starred ? 'text-[#1a73e8] opacity-100' : 'text-[#5f6368] dark:text-[#9aa0a6] opacity-0 group-hover:opacity-100'
+                          starred ? 'text-[#ea4335] opacity-100' : 'text-[#5f6368] dark:text-[#9aa0a6] opacity-0 group-hover:opacity-100'
                         }`}
-                        aria-label={starred ? `Unsave ${place.primaryText}` : `Save ${place.primaryText}`}
+                        aria-label={starred ? `Remove ${place.primaryText} from Favorites` : `Add ${place.primaryText} to Favorites`}
                         aria-pressed={starred}
                       >
                         <Star size={18} fill={starred ? 'currentColor' : 'none'} />
@@ -308,45 +309,6 @@ export default function SearchBox({
             <>
               {renderSavedRow('home', homeLoc, 'Home', <Home size={18} />)}
               {renderSavedRow('work', workLoc, 'Work', <Briefcase size={18} />)}
-
-              {saved.length > 0 && (
-                <>
-                  <div className="h-px my-1.5 bg-[#eceff1] dark:bg-[#3a3a3e]" />
-                  <p className="px-4 pt-1 pb-1 text-[12px] font-medium uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6]">Saved</p>
-                  {saved.map((place) => (
-                    <div
-                      key={place.id}
-                      className="group flex w-full items-center px-4 py-2.5 transition-colors hover:bg-[#f5f5f5] dark:hover:bg-[#3a3a3e]"
-                    >
-                      <button
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => selectLocation(place)}
-                        className="flex flex-1 items-center min-w-0 text-left"
-                      >
-                        <span className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full bg-[#e8f0fe] text-[#1a73e8]">
-                          <Star size={18} fill="currentColor" />
-                        </span>
-                        <span className="flex-1 min-w-0">
-                          <h3 className="m-0 text-[15px] leading-tight text-[#202124] dark:text-[#e8eaed] truncate">{place.primaryText}</h3>
-                          {place.secondaryText && (
-                            <p className="m-0 text-[13px] leading-snug text-[#5f6368] dark:text-[#9aa0a6] truncate">{place.secondaryText}</p>
-                          )}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => removeSaved(place.id)}
-                        className="ml-2 shrink-0 rounded-full p-1.5 text-[#5f6368] dark:text-[#9aa0a6] opacity-0 transition-opacity hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e] group-hover:opacity-100"
-                        aria-label={`Remove ${place.primaryText} from saved`}
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                  ))}
-                </>
-              )}
 
               <div className="h-px my-1.5 bg-[#eceff1] dark:bg-[#3a3a3e]" />
               <div className="flex items-center justify-between px-4 pt-1 pb-1">
@@ -405,7 +367,7 @@ export default function SearchBox({
                         className="flex items-center justify-center w-9 h-9 mr-4 shrink-0 rounded-full"
                         style={{ backgroundColor: `${list.color || '#5f6368'}22`, color: list.color || '#5f6368' }}
                       >
-                        <Folder size={18} />
+                        {list.isDefault ? <Star size={18} fill="currentColor" /> : <Folder size={18} />}
                       </span>
 
                       {renamingList === list.id ? (
@@ -443,7 +405,7 @@ export default function SearchBox({
                         </button>
                       )}
 
-                      {renamingList === list.id ? (
+                      {list.isDefault ? null : renamingList === list.id ? (
                         <button
                           type="button"
                           onMouseDown={(e) => e.preventDefault()}

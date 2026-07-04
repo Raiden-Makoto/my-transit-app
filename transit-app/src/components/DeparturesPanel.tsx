@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { Bus, TrainFront, TramFront, Ship, CableCar, X, RefreshCw, Radio } from 'lucide-react';
-import { getStopDepartures, DeparturesError, type StopDeparturesResult, type StopDeparture } from '../services/departures';
+import {
+  getStopDepartures,
+  DeparturesError,
+  type StopDeparturesResult,
+  type StopDeparture,
+  type RouteDepartures,
+} from '../services/departures';
 import { transitStopMode } from '../services/geocode';
 import type { SavedLocation } from '../types/location';
 
@@ -69,7 +75,10 @@ export default function DeparturesPanel({ stop, onClose }: { stop: SavedLocation
         setWarming(false);
       }
       try {
-        const result = await getStopDepartures({ lat: stop.lat, lon: stop.lon, mode: transitStopMode(stop) }, ac.signal);
+        const result = await getStopDepartures(
+          { lat: stop.lat, lon: stop.lon, mode: transitStopMode(stop), name: stop.primaryText },
+          ac.signal,
+        );
         if (!cancelled) {
           setData(result);
           setError(null);
@@ -102,7 +111,37 @@ export default function DeparturesPanel({ stop, onClose }: { stop: SavedLocation
   }, []);
 
   const stopName = data?.stop.name ?? stop.primaryText;
-  const routes = useMemo(() => data?.routes ?? [], [data]);
+  // A route+direction can arrive as several GTFS patterns; collapse them into a
+  // single card (one row per route + headsign) with one chronological, de-duped
+  // list — like Google Maps. Belt-and-suspenders on top of the server merge.
+  const routes = useMemo(() => {
+    const byRoute = new Map<string, RouteDepartures>();
+    const merged: RouteDepartures[] = [];
+    for (const r of data?.routes ?? []) {
+      const key = `${r.shortName ?? r.routeId ?? ''}||${(r.headsign ?? '').trim().toLowerCase()}`;
+      const existing = byRoute.get(key);
+      if (existing) {
+        existing.departures = existing.departures.concat(r.departures);
+      } else {
+        const copy = { ...r, departures: [...r.departures] };
+        byRoute.set(key, copy);
+        merged.push(copy);
+      }
+    }
+    for (const r of merged) {
+      const seen = new Set<number>();
+      r.departures = r.departures
+        .filter((d) => {
+          if (seen.has(d.departure)) return false;
+          seen.add(d.departure);
+          return true;
+        })
+        .sort((a, b) => a.departure - b.departure);
+    }
+    return merged
+      .filter((r) => r.departures.length > 0)
+      .sort((a, b) => a.departures[0].departure - b.departures[0].departure);
+  }, [data]);
 
   return (
     <div className="absolute top-[72px] right-3 z-[1000] flex max-h-[calc(100vh-72px-24px)] w-[min(92vw,400px)] flex-col font-sans">

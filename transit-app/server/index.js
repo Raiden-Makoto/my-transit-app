@@ -960,7 +960,23 @@ function secondsUntilServiceDayEnd() {
 const STOPS_BY_RADIUS_QUERY = `
 query Stops($lat: Float!, $lon: Float!, $radius: Int!) {
   stopsByRadius(lat: $lat, lon: $lon, radius: $radius) {
-    edges { node { stop { gtfsId name lat lon vehicleMode } distance } }
+    edges { node { stop { gtfsId name code lat lon vehicleMode } distance } }
+  }
+}`;
+
+// Look up GTFS stops by (partial) name. TransLink's static feed names every
+// stop precisely (e.g. "Phibbs Exchange @ Bay 7", code 60684), so a tapped stop
+// can be matched to its exact GTFS id by name/number instead of guessing the
+// nearest node by radius.
+const STOPS_BY_NAME_QUERY = `
+query StopsByName($name: String!) {
+  stops(name: $name) {
+    gtfsId
+    name
+    code
+    lat
+    lon
+    vehicleMode
   }
 }`;
 
@@ -986,6 +1002,52 @@ query Deps($id: String!, $start: Long!, $range: Int!, $num: Int!) {
   }
 }`;
 
+// Normalise a stop name for equality checks: lowercase, drop punctuation like
+// "@"/"/", collapse whitespace. So OSM's "Phibbs Exchange Bay 7" and GTFS's
+// "Phibbs Exchange @ Bay 7" compare equal.
+function normalizeStopName(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+// A short, contains-friendly token to hand OTP's stops(name:) filter — the base
+// place before bay/platform/@ markers (e.g. "Phibbs Exchange Bay 7" ->
+// "Phibbs Exchange"), capped to a few words.
+function stopSearchToken(name) {
+  const raw = String(name || '').trim();
+  if (!raw) return '';
+  const base = raw.split(/\s+(?:@|-|bay|platform|unwd)\b/i)[0].trim() || raw;
+  return base.split(/\s+/).slice(0, 4).join(' ');
+}
+
+// Resolve a place to its exact GTFS stop by name/number. Returns the matching
+// stop node or null when there's no unambiguous name match (caller then falls
+// back to radius). Prefers an exact normalized-name match; ties broken by the
+// requested vehicle mode, then proximity to the tapped point.
+async function resolveStopByName(name, { lat, lon, mode }) {
+  const token = stopSearchToken(name);
+  if (!token) return null;
+  const data = await otpQuery(STOPS_BY_NAME_QUERY, { name: token });
+  const stops = (data?.stops ?? []).filter((s) => s?.gtfsId);
+  if (stops.length === 0) return null;
+
+  const target = normalizeStopName(name);
+  let matches = stops.filter((s) => normalizeStopName(s.name) === target);
+  if (matches.length === 0) return null;
+  if (mode) {
+    const sameMode = matches.filter((s) => s.vehicleMode === mode);
+    if (sameMode.length) matches = sameMode;
+  }
+  if (matches.length > 1 && lat != null && lon != null) {
+    matches.sort(
+      (a, b) => (a.lat - lat) ** 2 + (a.lon - lon) ** 2 - ((b.lat - lat) ** 2 + (b.lon - lon) ** 2),
+    );
+  }
+  return matches[0];
+}
+
 // Pick the GTFS stop that best matches the tapped pin: prefer the requested
 // vehicle mode, then the nearest candidate within the search radius.
 function chooseStop(edges, mode) {
@@ -1006,18 +1068,36 @@ app.post('/api/stop-departures', async (req, res) => {
     return res.status(500).json({ error: 'Server is missing OTP_URL. Add it to transit-app/.env.local.' });
   }
 
-  const { lat, lon, mode, radius } = req.body ?? {};
+  const { lat, lon, mode, radius, name } = req.body ?? {};
   if (lat == null || lon == null) {
     return res.status(400).json({ error: 'lat and lon are required.' });
   }
-  const searchRadius = Math.min(Math.max(Number(radius) || 200, 50), 500);
+  const baseRadius = Math.min(Math.max(Number(radius) || 300, 50), 1200);
+  const modeHint = typeof mode === 'string' && mode ? mode : null;
 
   try {
-    // 1) Resolve the pin to a concrete GTFS stop (OSM ids don't map to GTFS).
-    const stopsData = await otpQuery(STOPS_BY_RADIUS_QUERY, { lat, lon, radius: searchRadius });
-    const edges = stopsData?.stopsByRadius?.edges ?? [];
-    const chosen = chooseStop(edges, typeof mode === 'string' ? mode : null);
-    if (!chosen) {
+    // 1) Resolve to the *exact* GTFS stop. TransLink's static feed names every
+    // stop/bay precisely, so first match by name/number (Google-Maps style: the
+    // stop you tapped is the stop you get). Only if there's no unambiguous name
+    // match do we fall back to nearest-by-radius.
+    let stopId = null;
+    const byName = await resolveStopByName(name, { lat, lon, mode: modeHint });
+    if (byName) {
+      stopId = byName.gtfsId;
+    } else {
+      // A pin can sit a few hundred metres from the GTFS node (platform vs
+      // stop-position offsets, station centroids), so widen until something hits.
+      const radiiToTry = [baseRadius, baseRadius * 2, Math.min(baseRadius * 4, 1500)];
+      let chosen = null;
+      for (const r of radiiToTry) {
+        const stopsData = await otpQuery(STOPS_BY_RADIUS_QUERY, { lat, lon, radius: Math.round(r) });
+        const edges = stopsData?.stopsByRadius?.edges ?? [];
+        chosen = chooseStop(edges, modeHint);
+        if (chosen) break;
+      }
+      if (chosen) stopId = chosen.stop.gtfsId;
+    }
+    if (!stopId) {
       return res.status(404).json({ error: 'No transit stop found near this location.' });
     }
 
@@ -1025,7 +1105,7 @@ app.post('/api/stop-departures', async (req, res) => {
     const start = Math.floor(Date.now() / 1000);
     const range = secondsUntilServiceDayEnd();
     const depData = await otpQuery(STOP_DEPARTURES_QUERY, {
-      id: chosen.stop.gtfsId,
+      id: stopId,
       start,
       range,
       num: 100,
@@ -1066,6 +1146,34 @@ app.post('/api/stop-departures', async (req, res) => {
           departures,
         };
       })
+      .filter((g) => g.departures.length > 0);
+
+    // A route can have several GTFS *patterns* for the same direction (stop-
+    // sequence variants). Google Maps shows one row per route+direction, so
+    // merge patterns that share a route and headsign into a single, chronological
+    // list (de-duping any overlapping departures).
+    const byRoute = new Map();
+    for (const g of groups) {
+      const key = `${g.shortName ?? g.routeId ?? ''}||${(g.headsign ?? '').trim().toLowerCase()}`;
+      const existing = byRoute.get(key);
+      if (existing) {
+        existing.departures = existing.departures.concat(g.departures);
+      } else {
+        byRoute.set(key, { ...g, departures: [...g.departures] });
+      }
+    }
+    const routes = [...byRoute.values()]
+      .map((g) => {
+        const seen = new Set();
+        const departures = g.departures
+          .filter((d) => {
+            if (seen.has(d.departure)) return false;
+            seen.add(d.departure);
+            return true;
+          })
+          .sort((a, b) => a.departure - b.departure);
+        return { ...g, headsign: departures[0]?.headsign ?? g.headsign, departures };
+      })
       .filter((g) => g.departures.length > 0)
       .sort((a, b) => a.departures[0].departure - b.departures[0].departure);
 
@@ -1077,7 +1185,7 @@ app.post('/api/stop-departures', async (req, res) => {
         lon: stop.lon,
         mode: stop.vehicleMode ?? null,
       },
-      routes: groups,
+      routes,
       generatedAt: nowMs,
     });
   } catch (err) {

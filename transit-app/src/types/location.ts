@@ -16,6 +16,8 @@ export interface PlaceCollection {
     name: string;
     color: string;
     places: SavedLocation[];
+    /** Built-in list that always exists (e.g. "Favorites"); can't be deleted/renamed. */
+    isDefault?: boolean;
   }
 
 export type TripWhenMode = 'now' | 'leave' | 'arrive';

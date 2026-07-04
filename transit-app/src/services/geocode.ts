@@ -78,10 +78,17 @@ const TRANSIT_STOP_VALUES: Record<string, Record<string, string>> = {
   public_transport: { stop_position: '', platform: '', station: '', stop_area: '' },
 };
 
+// TransLink-style stop names are a reliable signal on their own, used as a
+// fallback when OSM tags are absent (e.g. places saved before osmKey existed).
+const TRANSIT_NAME_RE =
+  /(@|\bexchange\b|\bstation\b|\bstn\b|\bskytrain\b|\bseabus\b|\bwharf\b|\bterminal\b|\bbay\s*\d|\bplatform\b|\bwestbound\b|\beastbound\b|\bnorthbound\b|\bsouthbound\b|\bunloading\b)/i;
+
 /** True when a geocoded place is a boardable transit stop/station. */
-export function isTransitStop(loc: Pick<SavedLocation, 'osmKey' | 'category'>): boolean {
-  if (!loc.osmKey || !loc.category) return false;
-  return loc.category in (TRANSIT_STOP_VALUES[loc.osmKey] ?? {});
+export function isTransitStop(loc: Pick<SavedLocation, 'osmKey' | 'category' | 'primaryText'>): boolean {
+  if (loc.osmKey && loc.category && loc.category in (TRANSIT_STOP_VALUES[loc.osmKey] ?? {})) {
+    return true;
+  }
+  return Boolean(loc.primaryText && TRANSIT_NAME_RE.test(loc.primaryText));
 }
 
 /**

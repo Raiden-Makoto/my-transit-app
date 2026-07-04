@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
-import { Star, FolderPlus, Route, Clock } from 'lucide-react';
+import { FolderPlus, Route, Clock } from 'lucide-react';
 import L from 'leaflet';
 import type { PlaceCollection, SavedLocation, TripLeg } from '../types/location';
 import type { OtpLeg } from '../services/otp';
@@ -243,7 +243,10 @@ const popupBtn = (filled = false, primary = false): React.CSSProperties => ({
   borderRadius: 9999,
   background: primary ? '#1a73e8' : filled ? '#e8f0fe' : '#fff',
   color: primary ? '#fff' : '#1a73e8',
-  font: '500 13px system-ui, sans-serif',
+  font: '500 12px system-ui, sans-serif',
+  whiteSpace: 'nowrap',
+  flexShrink: 0,
+  lineHeight: 1.2,
   cursor: 'pointer',
 });
 
@@ -259,8 +262,6 @@ interface MapViewProps {
   showCorridors: boolean;
   theme: 'light' | 'dark';
   onBboxChange: (bbox: Bbox) => void;
-  isSaved: (id: string) => boolean;
-  onToggleSaved: (place: SavedLocation) => void;
   onAddToList: (place: SavedLocation) => void;
   onGetDirections: (place: SavedLocation) => void;
   onViewDepartures: (place: SavedLocation) => void;
@@ -278,8 +279,6 @@ export default function MapView({
   showCorridors,
   theme,
   onBboxChange,
-  isSaved,
-  onToggleSaved,
   onAddToList,
   onGetDirections,
   onViewDepartures,
@@ -319,7 +318,7 @@ export default function MapView({
       </Marker>
       {destination && (
         <Marker position={[destination.lat, destination.lon]} icon={redPinIcon}>
-          <Popup>
+          <Popup maxWidth={400} minWidth={0}>
             <strong>{destination.primaryText}</strong>
             {destination.secondaryText && (
               <>
@@ -328,11 +327,7 @@ export default function MapView({
               </>
             )}
             <br />
-            <span style={{ display: 'inline-flex', gap: 6, marginTop: 8 }}>
-              <button type="button" onClick={() => onToggleSaved(destination)} style={popupBtn(isSaved(destination.id))}>
-                <Star size={14} fill={isSaved(destination.id) ? 'currentColor' : 'none'} />
-                {isSaved(destination.id) ? 'Saved' : 'Save'}
-              </button>
+            <span style={{ display: 'flex', flexWrap: 'nowrap', gap: 6, marginTop: 8 }}>
               <button type="button" onClick={() => onAddToList(destination)} style={popupBtn()}>
                 <FolderPlus size={14} />
                 Add to list
@@ -344,7 +339,7 @@ export default function MapView({
               {isTransitStop(destination) && (
                 <button type="button" onClick={() => onViewDepartures(destination)} style={popupBtn()}>
                   <Clock size={14} />
-                  View departures
+                  Departures
                 </button>
               )}
             </span>
@@ -353,7 +348,7 @@ export default function MapView({
       )}
       {viewedList?.places.map((place) => (
         <Marker key={place.id} position={[place.lat, place.lon]} icon={coloredPinIcon(viewedList.color || '#1a73e8')}>
-          <Popup>
+          <Popup maxWidth={400} minWidth={0}>
             <strong>{place.primaryText}</strong>
             {place.secondaryText && (
               <>
@@ -362,7 +357,11 @@ export default function MapView({
               </>
             )}
             <br />
-            <span style={{ display: 'inline-flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+            <span style={{ display: 'flex', flexWrap: 'nowrap', gap: 6, marginTop: 8 }}>
+              <button type="button" onClick={() => onAddToList(place)} style={popupBtn()}>
+                <FolderPlus size={14} />
+                Add to list
+              </button>
               <button type="button" onClick={() => onGetDirections(place)} style={popupBtn(false, true)}>
                 <Route size={14} />
                 Directions
@@ -370,7 +369,7 @@ export default function MapView({
               {isTransitStop(place) && (
                 <button type="button" onClick={() => onViewDepartures(place)} style={popupBtn()}>
                   <Clock size={14} />
-                  View departures
+                  Departures
                 </button>
               )}
             </span>

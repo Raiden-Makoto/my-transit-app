@@ -42,7 +42,7 @@ export class DeparturesError extends Error {
 }
 
 export async function getStopDepartures(
-  input: { lat: number; lon: number; mode?: string | null; radius?: number },
+  input: { lat: number; lon: number; mode?: string | null; radius?: number; name?: string | null },
   signal?: AbortSignal,
 ): Promise<StopDeparturesResult> {
   const res = await fetch('/api/stop-departures', {
@@ -53,6 +53,7 @@ export async function getStopDepartures(
       lon: input.lon,
       mode: input.mode ?? undefined,
       radius: input.radius ?? undefined,
+      name: input.name ?? undefined,
     }),
     signal,
   });

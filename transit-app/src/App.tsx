@@ -20,7 +20,6 @@ import {
   type OtpLeg,
   type RoutePrefs,
 } from './services/otp';
-import { useSavedPlaces } from './hooks/useSavedPlaces';
 import { useCollections } from './hooks/useCollections';
 import { useLocationHistory } from './hooks/useLocationHistory';
 import { useTheme } from './hooks/useTheme';
@@ -80,7 +79,6 @@ function App() {
   const [tripInitialLegs, setTripInitialLegs] = useState<TripLeg[] | null>(null);
   const [showCorridors, setShowCorridors] = useState(true);
   const { theme, toggleTheme } = useTheme();
-  const savedPlaces = useSavedPlaces();
   const collections = useCollections();
   const history = useLocationHistory();
 
@@ -291,7 +289,6 @@ function App() {
       <SearchBox
         onLocationSelect={handleLocationSelect}
         viewport={viewport}
-        savedPlaces={savedPlaces}
         collections={collections}
         history={history}
         onAddToList={setPickerPlace}
@@ -451,7 +448,6 @@ function App() {
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        savedPlaces={savedPlaces}
         history={history}
         collections={collections}
         onLocationSelect={handleLocationSelect}
@@ -514,8 +510,6 @@ function App() {
         showCorridors={showCorridors}
         theme={theme}
         onBboxChange={setBbox}
-        isSaved={savedPlaces.isSaved}
-        onToggleSaved={savedPlaces.toggleSaved}
         onAddToList={setPickerPlace}
         onGetDirections={handleGetDirections}
         onViewDepartures={setDeparturesStop}

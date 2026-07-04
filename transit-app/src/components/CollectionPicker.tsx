@@ -61,7 +61,7 @@ export default function CollectionPicker({ place, collections, onClose }: Collec
           )}
           {lists.map((list) => {
             const checked = isPlaceInCollection(list.id, place.id);
-            const full = list.places.length >= COLLECTION_PLACE_LIMIT;
+            const full = !list.isDefault && list.places.length >= COLLECTION_PLACE_LIMIT;
             const disabled = full && !checked;
             return (
               <button
@@ -87,8 +87,9 @@ export default function CollectionPicker({ place, collections, onClose }: Collec
                 <span className="flex-1 min-w-0">
                   <span className="block text-[15px] text-[#202124] truncate">{list.name}</span>
                   <span className="block text-[12px] text-[#5f6368]">
-                    {list.places.length}/{COLLECTION_PLACE_LIMIT}
-                    {full ? ' · Full' : ''}
+                    {list.isDefault
+                      ? `${list.places.length} ${list.places.length === 1 ? 'place' : 'places'}`
+                      : `${list.places.length}/${COLLECTION_PLACE_LIMIT}${full ? ' · Full' : ''}`}
                   </span>
                 </span>
               </button>

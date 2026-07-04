@@ -13,7 +13,6 @@ import {
   Trash2,
   Check,
 } from 'lucide-react';
-import type { SavedPlacesApi } from '../hooks/useSavedPlaces';
 import type { HistoryApi } from '../hooks/useLocationHistory';
 import { COLLECTION_PLACE_LIMIT, COLLECTION_COLORS, type CollectionsApi } from '../hooks/useCollections';
 import type { PlaceCollection, SavedLocation } from '../types/location';
@@ -21,7 +20,6 @@ import type { PlaceCollection, SavedLocation } from '../types/location';
 type SidebarProps = {
   open: boolean;
   onClose: () => void;
-  savedPlaces: SavedPlacesApi;
   history: HistoryApi;
   collections: CollectionsApi;
   onLocationSelect: (location: SavedLocation) => void;
@@ -32,7 +30,6 @@ type SidebarProps = {
 export default function Sidebar({
   open,
   onClose,
-  savedPlaces,
   history,
   collections,
   onLocationSelect,
@@ -91,24 +88,6 @@ export default function Sidebar({
         </div>
 
         <div className="themed-scroll flex-1 overflow-y-auto py-2 text-[#202124] dark:text-[#e8eaed]">
-          {/* Saved */}
-          <SectionHeader icon={<Star size={16} className="text-[#1a73e8]" />} title="Saved" />
-          {savedPlaces.saved.length === 0 ? (
-            <Empty text="No saved places" />
-          ) : (
-            savedPlaces.saved.map((place) => (
-              <Row
-                key={place.id}
-                icon={<Star size={18} className="text-[#1a73e8]" fill="currentColor" />}
-                place={place}
-                onSelect={() => select(place)}
-                onRemove={() => savedPlaces.removeSaved(place.id)}
-              />
-            ))
-          )}
-
-          <div className="h-px my-2 bg-[#eceff1] dark:bg-[#3a3a3e]" />
-
           {/* Recents */}
           <SectionHeader icon={<Clock size={16} className="text-[#5f6368] dark:text-[#9aa0a6]" />} title="Recents" />
           {history.recents.length === 0 ? (
@@ -141,7 +120,7 @@ export default function Sidebar({
                       className="flex items-center justify-center w-7 h-7 mr-3 shrink-0 rounded-full"
                       style={{ backgroundColor: `${list.color || '#5f6368'}22`, color: list.color || '#5f6368' }}
                     >
-                      <Folder size={16} />
+                      {list.isDefault ? <Star size={16} fill="currentColor" /> : <Folder size={16} />}
                     </span>
                     {renamingList === list.id ? (
                       <input
@@ -176,7 +155,7 @@ export default function Sidebar({
                       </button>
                     )}
 
-                    {renamingList === list.id ? (
+                    {list.isDefault ? null : renamingList === list.id ? (
                       <button
                         type="button"
                         onClick={submitRename}
@@ -257,17 +236,19 @@ export default function Sidebar({
                             <MapIcon size={16} />
                             View on map
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onPlanWithAi(list);
-                              onClose();
-                            }}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium text-[#7b1fa2] bg-[#7b1fa2]/10"
-                          >
-                            <Sparkles size={16} />
-                            Plan with AI
-                          </button>
+                          {!list.isDefault && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onPlanWithAi(list);
+                                onClose();
+                              }}
+                              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium text-[#7b1fa2] bg-[#7b1fa2]/10"
+                            >
+                              <Sparkles size={16} />
+                              Plan with AI
+                            </button>
+                          )}
                         </div>
 
                         {list.places.length === 0 && (
