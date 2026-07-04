@@ -628,6 +628,16 @@ query Plan($from: InputCoordinates!, $to: InputCoordinates!, $date: String, $tim
         route { shortName longName color textColor }
         intermediateStops { name }
         legGeometry { points }
+        alerts {
+          id
+          alertHeaderText
+          alertDescriptionText
+          alertSeverityLevel
+          alertEffect
+          alertCause
+          effectiveStartDate
+          effectiveEndDate
+        }
       }
     }
   }
@@ -665,6 +675,19 @@ function mapItineraries(data) {
             textColor: leg.route.textColor,
           }
         : null,
+      // Service alerts OTP has matched to this leg (its route + stops).
+      alerts: Array.isArray(leg.alerts)
+        ? leg.alerts.map((a) => ({
+            id: a.id ?? null,
+            header: a.alertHeaderText ?? null,
+            description: a.alertDescriptionText ?? null,
+            severity: a.alertSeverityLevel ?? null,
+            effect: a.alertEffect ?? null,
+            cause: a.alertCause ?? null,
+            start: a.effectiveStartDate ?? null,
+            end: a.effectiveEndDate ?? null,
+          }))
+        : [],
       geometry: leg.legGeometry?.points ? decodePolyline(leg.legGeometry.points) : [],
     })),
   }));

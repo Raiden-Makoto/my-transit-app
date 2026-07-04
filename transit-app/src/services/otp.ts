@@ -13,6 +13,17 @@ export interface OtpRoute {
   textColor?: string;
 }
 
+export interface OtpAlert {
+  id: string | null;
+  header: string | null;
+  description: string | null;
+  severity: string | null; // INFO | WARNING | SEVERE | ...
+  effect: string | null; // DETOUR | REDUCED_SERVICE | STOP_MOVED | NO_SERVICE | ...
+  cause: string | null;
+  start: number | null; // epoch seconds
+  end: number | null; // epoch seconds
+}
+
 export interface OtpLeg {
   mode: string; // WALK | BUS | SUBWAY | RAIL | TRAM | FERRY | ...
   duration: number; // seconds
@@ -24,6 +35,7 @@ export interface OtpLeg {
   from: OtpPlace;
   to: OtpPlace;
   route: OtpRoute | null;
+  alerts?: OtpAlert[]; // service alerts OTP matched to this leg
   geometry: [number, number][]; // decoded [lat, lon] points
 }
 

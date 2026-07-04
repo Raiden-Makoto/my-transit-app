@@ -1,6 +1,6 @@
-import { Footprints, Bus, TrainFront, TramFront, Ship, CableCar, ChevronRight, X, Check, Pencil, MapPin } from 'lucide-react';
+import { Footprints, Bus, TrainFront, TramFront, Ship, CableCar, ChevronRight, X, Check, Pencil, MapPin, TriangleAlert } from 'lucide-react';
 import { type ComponentType } from 'react';
-import type { LegPlan, OtpLeg, RoutePrefs } from '../services/otp';
+import type { LegPlan, OtpAlert, OtpLeg, RoutePrefs } from '../services/otp';
 
 const MODE_ICON: Record<string, ComponentType<{ size?: number }>> = {
   WALK: Footprints,
@@ -49,6 +49,56 @@ function legLabel(leg: OtpLeg): string {
   return leg.route?.shortName || leg.route?.longName || '';
 }
 
+const EFFECT_LABEL: Record<string, string> = {
+  DETOUR: 'Detour',
+  REDUCED_SERVICE: 'Reduced service',
+  SIGNIFICANT_DELAYS: 'Delays',
+  NO_SERVICE: 'No service',
+  MODIFIED_SERVICE: 'Modified service',
+  STOP_MOVED: 'Stop moved',
+  ADDITIONAL_SERVICE: 'Added service',
+  OTHER_EFFECT: 'Notice',
+  UNKNOWN_EFFECT: 'Notice',
+  NO_EFFECT: 'Notice',
+};
+
+function effectLabel(effect: string | null): string {
+  if (!effect) return 'Notice';
+  return EFFECT_LABEL[effect] ?? effect.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+}
+
+// Unique alerts across a set of legs (an itinerary), de-duped by id/header —
+// the same detour is often attached to several legs.
+function uniqueAlerts(legs: OtpLeg[]): OtpAlert[] {
+  const seen = new Set<string>();
+  const out: OtpAlert[] = [];
+  for (const leg of legs) {
+    for (const a of leg.alerts ?? []) {
+      const key = a.id || a.header || '';
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(a);
+    }
+  }
+  return out;
+}
+
+// A single amber service-alert row (Google-Maps style): effect tag + text.
+function AlertItem({ alert }: { alert: OtpAlert }) {
+  const text = alert.header || alert.description || 'Service alert';
+  return (
+    <div className="flex items-start gap-1.5 rounded-md bg-[#fef7e0] px-2 py-1.5 dark:bg-[#3a2f16]">
+      <TriangleAlert size={13} className="mt-0.5 shrink-0 text-[#b06000] dark:text-[#fdd663]" />
+      <div className="min-w-0">
+        <span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-[#b06000] dark:text-[#fdd663]">
+          {effectLabel(alert.effect)}
+        </span>
+        <span className="text-[11px] leading-snug text-[#6b4a00] dark:text-[#f3d68a]">{text}</span>
+      </div>
+    </div>
+  );
+}
+
 // One line-item in the complete-itinerary step list.
 function StepRow({ leg, isLast }: { leg: OtpLeg; isLast: boolean }) {
   const Icon = MODE_ICON[leg.mode] ?? Bus;
@@ -93,6 +143,13 @@ function StepRow({ leg, isLast }: { leg: OtpLeg; isLast: boolean }) {
           {fmtTime(leg.endTime)} · Get off at {leg.to.name}
           {stops > 0 ? ` (${stops} stop${stops === 1 ? '' : 's'})` : ''}
         </div>
+        {(leg.alerts?.length ?? 0) > 0 && (
+          <div className="mt-1.5 flex flex-col gap-1">
+            {(leg.alerts ?? []).map((a, k) => (
+              <AlertItem key={a.id ?? k} alert={a} />
+            ))}
+          </div>
+        )}
       </div>
     </li>
   );
@@ -360,6 +417,7 @@ export default function ItineraryOptions({
               <ul className="themed-scroll min-h-0 flex-1 overflow-y-auto">
                 {activePlan?.options.map((opt, i) => {
                   const isSelected = i === activePlan.selected;
+                  const optAlerts = uniqueAlerts(opt.legs);
                   return (
                     <li key={i}>
                       <button
@@ -389,6 +447,19 @@ export default function ItineraryOptions({
                           ))}
                           {isSelected && <Check size={15} className="ml-auto text-[#1a73e8]" />}
                         </div>
+                        {optAlerts.length > 0 &&
+                          (isSelected ? (
+                            <div className="mt-2 flex flex-col gap-1">
+                              {optAlerts.map((a, k) => (
+                                <AlertItem key={a.id ?? k} alert={a} />
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-[#b06000] dark:text-[#fdd663]">
+                              <TriangleAlert size={12} />
+                              {optAlerts.length} service alert{optAlerts.length === 1 ? '' : 's'}
+                            </div>
+                          ))}
                       </button>
                     </li>
                   );
