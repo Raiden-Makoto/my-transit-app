@@ -1,5 +1,5 @@
-import { Footprints, Bus, TrainFront, TramFront, Ship, CableCar, ChevronRight, X, Check, ListChecks, Pencil, MapPin } from 'lucide-react';
-import { type ComponentType, useState } from 'react';
+import { Footprints, Bus, TrainFront, TramFront, Ship, CableCar, ChevronRight, X, Check, Pencil, MapPin } from 'lucide-react';
+import { type ComponentType } from 'react';
 import type { LegPlan, OtpLeg, RoutePrefs } from '../services/otp';
 
 const MODE_ICON: Record<string, ComponentType<{ size?: number }>> = {
@@ -159,6 +159,9 @@ interface ItineraryOptionsProps {
   onPrefsChange: (next: RoutePrefs) => void;
   loading: boolean;
   error: string | null;
+  /** Which face of the panel to show; controlled by the parent. */
+  view: 'options' | 'complete';
+  onViewChange: (view: 'options' | 'complete') => void;
 }
 
 export default function ItineraryOptions({
@@ -171,25 +174,14 @@ export default function ItineraryOptions({
   onPrefsChange,
   loading,
   error,
+  view,
+  onViewChange,
 }: ItineraryOptionsProps) {
   const toggle = (key: keyof RoutePrefs) => onPrefsChange({ ...prefs, [key]: !prefs[key] });
 
   const multiLeg = legPlans.length > 1;
   const safeActive = Math.min(activeLeg, Math.max(0, legPlans.length - 1));
   const activePlan = legPlans[safeActive] ?? null;
-
-  // Which face of the panel is showing: the left-hand editor (route options per
-  // leg) or the right-hand complete-itinerary summary.
-  const [view, setView] = useState<'options' | 'complete'>('options');
-
-  // Fall back to the editor whenever the trip itself changes (a new plan). Done
-  // during render (not in an effect) to avoid a cascading extra render.
-  const planKey = legPlans.map((p) => p.id).join('|');
-  const [prevPlanKey, setPrevPlanKey] = useState(planKey);
-  if (planKey !== prevPlanKey) {
-    setPrevPlanKey(planKey);
-    setView('options');
-  }
 
   // The chosen itinerary for each leg, in order — what the summary lists.
   const chosenPerLeg = legPlans.map((plan) => plan.options[plan.selected] ?? null);
@@ -275,7 +267,7 @@ export default function ItineraryOptions({
           <div className="shrink-0 border-t border-[#e8eaed] dark:border-[#3a3a3e] p-2">
             <button
               type="button"
-              onClick={() => setView('options')}
+              onClick={() => onViewChange('options')}
               className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#f1f3f4] dark:bg-[#3a3a3e] px-3 py-2 text-[13px] font-medium text-[#202124] dark:text-[#e8eaed] hover:bg-[#e8eaed] dark:hover:bg-[#444448] transition-colors"
             >
               <Pencil size={14} />
@@ -296,26 +288,14 @@ export default function ItineraryOptions({
           <span className="text-[12px] font-semibold uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6]">
             {loading ? 'Finding routes…' : multiLeg ? `Trip · ${legPlans.length} legs` : 'Route'}
           </span>
-          <div className="flex items-center gap-1">
-            {multiLeg && (
-              <button
-                type="button"
-                onClick={() => setView('complete')}
-                className="flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium text-[#1a73e8] hover:bg-[#e8f0fe] dark:hover:bg-[#1a3a5c]"
-              >
-                <ListChecks size={14} />
-                View complete itinerary
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex items-center justify-center rounded-full p-1 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]"
-              aria-label="Clear route"
-            >
-              <X size={16} />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center justify-center rounded-full p-1 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]"
+            aria-label="Clear route"
+          >
+            <X size={16} />
+          </button>
         </div>
 
         {error ? (

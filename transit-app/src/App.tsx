@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { Menu, X, Route, Sparkles, TrainFront, Sun, Moon, Loader2 } from 'lucide-react';
+import { Menu, X, Route, Sparkles, TrainFront, Sun, Moon, Loader2, ListChecks } from 'lucide-react';
 import SearchBox from './components/SearchBox';
 import CollectionPicker from './components/CollectionPicker';
 import Sidebar from './components/Sidebar';
@@ -65,6 +65,10 @@ function App() {
   const [tripLegs, setTripLegs] = useState<TripLeg[] | null>(null);
   const [legPlans, setLegPlans] = useState<LegPlan[] | null>(null);
   const [activeLeg, setActiveLeg] = useState(0);
+  // Which face of the itinerary UI is showing: the per-leg route editor
+  // ('options', left side) or the complete-itinerary summary ('complete', right
+  // side). Lifted here so the toggle button can float over the whole map.
+  const [itineraryView, setItineraryView] = useState<'options' | 'complete'>('options');
   const [routeIsAi, setRouteIsAi] = useState(false);
   const [routing, setRouting] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
@@ -109,6 +113,7 @@ function App() {
     setTripLegs(null);
     setLegPlans(null);
     setActiveLeg(0);
+    setItineraryView('options');
     setRouteError(null);
     setRouting(false);
   };
@@ -129,6 +134,7 @@ function App() {
   const runPlan = async (legs: TripLeg[], prefs: RoutePrefs, ai = false) => {
     setLegPlans(null);
     setActiveLeg(0);
+    setItineraryView('options');
     setRouteError(null);
     setRouting(true);
 
@@ -410,6 +416,20 @@ function App() {
         </div>
       )}
 
+      {/* Float the "complete itinerary" toggle in the top-right of the whole
+          map (multi-leg trips only). Hidden while the summary is already open. */}
+      {legPlans && legPlans.length > 1 && !routing && !routeError && itineraryView === 'options' && (
+        <button
+          type="button"
+          onClick={() => setItineraryView('complete')}
+          className="absolute top-3 right-3 z-[1000] flex items-center gap-1.5 h-10 px-4 bg-white dark:bg-[#2a2a2e] rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#1a73e8] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
+          aria-label="View complete itinerary"
+        >
+          <ListChecks size={18} />
+          View complete itinerary
+        </button>
+      )}
+
       {(legPlans || routing || routeError) && tripLegs && (
         <ItineraryOptions
           legPlans={legPlans ?? []}
@@ -421,6 +441,8 @@ function App() {
           onPrefsChange={handlePrefsChange}
           loading={routing}
           error={routeError}
+          view={itineraryView}
+          onViewChange={setItineraryView}
         />
       )}
 
