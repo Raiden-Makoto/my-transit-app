@@ -1,5 +1,5 @@
-import { Footprints, Bus, TrainFront, TramFront, Ship, CableCar, ChevronRight, X, Check, ListChecks } from 'lucide-react';
-import { type ComponentType } from 'react';
+import { Footprints, Bus, TrainFront, TramFront, Ship, CableCar, ChevronRight, X, Check, ListChecks, Pencil, MapPin } from 'lucide-react';
+import { type ComponentType, useState } from 'react';
 import type { LegPlan, OtpLeg, RoutePrefs } from '../services/otp';
 
 const MODE_ICON: Record<string, ComponentType<{ size?: number }>> = {
@@ -47,6 +47,55 @@ function fmtWalk(meters: number): string {
 
 function legLabel(leg: OtpLeg): string {
   return leg.route?.shortName || leg.route?.longName || '';
+}
+
+// One line-item in the complete-itinerary step list.
+function StepRow({ leg, isLast }: { leg: OtpLeg; isLast: boolean }) {
+  const Icon = MODE_ICON[leg.mode] ?? Bus;
+  const mins = Math.max(1, Math.round(leg.duration / 60));
+
+  if (leg.mode === 'WALK') {
+    return (
+      <li className="flex gap-2.5">
+        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#f1f3f4] dark:bg-[#3a3a3e] text-[#5f6368] dark:text-[#9aa0a6]">
+          <Icon size={14} />
+        </span>
+        <div className="min-w-0 pb-1">
+          <div className="text-[13px] font-medium text-[#202124] dark:text-[#e8eaed]">Walk {mins} min</div>
+          {!isLast && (
+            <div className="truncate text-[12px] text-[#5f6368] dark:text-[#9aa0a6]">to {leg.to.name}</div>
+          )}
+        </div>
+      </li>
+    );
+  }
+
+  const bg = leg.route?.color ? `#${leg.route.color}` : MODE_COLOR[leg.mode] ?? '#1a73e8';
+  const fg = leg.route?.textColor ? `#${leg.route.textColor}` : '#ffffff';
+  const stops = leg.numStops ?? 0;
+  return (
+    <li className="flex gap-2.5">
+      <span
+        className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+        style={{ backgroundColor: bg, color: fg }}
+      >
+        <Icon size={14} />
+      </span>
+      <div className="min-w-0 pb-1">
+        <div className="text-[13px] font-medium text-[#202124] dark:text-[#e8eaed]">
+          {legLabel(leg) && <span className="font-semibold">{legLabel(leg)}</span>}
+          {leg.headsign ? ` toward ${leg.headsign}` : ''}
+        </div>
+        <div className="text-[12px] text-[#5f6368] dark:text-[#9aa0a6]">
+          {fmtTime(leg.startTime)} · Board at {leg.from.name}
+        </div>
+        <div className="text-[12px] text-[#5f6368] dark:text-[#9aa0a6]">
+          {fmtTime(leg.endTime)} · Get off at {leg.to.name}
+          {stops > 0 ? ` (${stops} stop${stops === 1 ? '' : 's'})` : ''}
+        </div>
+      </div>
+    </li>
+  );
 }
 
 function LegChip({ leg }: { leg: OtpLeg }) {
@@ -129,6 +178,115 @@ export default function ItineraryOptions({
   const safeActive = Math.min(activeLeg, Math.max(0, legPlans.length - 1));
   const activePlan = legPlans[safeActive] ?? null;
 
+  // Which face of the panel is showing: the left-hand editor (route options per
+  // leg) or the right-hand complete-itinerary summary.
+  const [view, setView] = useState<'options' | 'complete'>('options');
+
+  // Fall back to the editor whenever the trip itself changes (a new plan). Done
+  // during render (not in an effect) to avoid a cascading extra render.
+  const planKey = legPlans.map((p) => p.id).join('|');
+  const [prevPlanKey, setPrevPlanKey] = useState(planKey);
+  if (planKey !== prevPlanKey) {
+    setPrevPlanKey(planKey);
+    setView('options');
+  }
+
+  // The chosen itinerary for each leg, in order — what the summary lists.
+  const chosenPerLeg = legPlans.map((plan) => plan.options[plan.selected] ?? null);
+  const summaryReady = multiLeg && !loading && !error && legPlans.length > 0;
+
+  if (view === 'complete' && summaryReady) {
+    return (
+      <div className="absolute top-[72px] right-3 z-[1000] flex max-h-[calc(100vh-72px-24px)] w-[min(92vw,420px)] flex-col font-sans">
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-white dark:bg-[#2a2a2e] shadow-[0_1px_4px_rgba(0,0,0,0.3)]">
+          <div className="flex shrink-0 items-center justify-between px-3 py-2 border-b border-[#e8eaed] dark:border-[#3a3a3e]">
+            <span className="text-[12px] font-semibold uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6]">
+              Complete itinerary
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center justify-center rounded-full p-1 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]"
+              aria-label="Clear route"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="themed-scroll min-h-0 flex-1 overflow-y-auto p-3">
+            <ol className="flex flex-col gap-3">
+              {legPlans.map((plan, i) => {
+                const chosen = chosenPerLeg[i];
+                const isActive = i === safeActive;
+                return (
+                  <li key={plan.id}>
+                    {/* Clicking a leg's card selects it, which the map watches
+                        to draw just that leg's route. */}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onActiveLegChange(i)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onActiveLegChange(i);
+                        }
+                      }}
+                      aria-pressed={isActive}
+                      className={`cursor-pointer rounded-lg border p-3 transition-colors ${
+                        isActive
+                          ? 'border-[#1a73e8] bg-[#e8f0fe] dark:bg-[#1a3a5c]'
+                          : 'border-[#e8eaed] dark:border-[#3a3a3e] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]'
+                      }`}
+                    >
+                      <div className="mb-1 flex items-baseline justify-between gap-2">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6]">
+                          Leg {i + 1}
+                        </span>
+                        {chosen && (
+                          <span className="text-[11px] text-[#5f6368] dark:text-[#9aa0a6]">
+                            {fmtTime(chosen.startTime)} – {fmtTime(chosen.endTime)} · {fmtDuration(chosen.duration)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mb-2 flex items-center gap-1.5 text-[13px] font-medium text-[#202124] dark:text-[#e8eaed]">
+                        <MapPin size={13} className="shrink-0 text-[#1a73e8]" />
+                        <span className="truncate">{plan.fromName}</span>
+                        <ChevronRight size={13} className="shrink-0 text-[#bdc1c6] dark:text-[#5f6368]" />
+                        <span className="truncate">{plan.toName}</span>
+                      </div>
+
+                      {chosen && chosen.legs.length > 0 ? (
+                        <ol className="flex flex-col gap-1.5 border-l-2 border-[#e8eaed] dark:border-[#3a3a3e] pl-3">
+                          {chosen.legs.map((leg, j) => (
+                            <StepRow key={j} leg={leg} isLast={j === chosen.legs.length - 1} />
+                          ))}
+                        </ol>
+                      ) : (
+                        <div className="text-[12px] text-[#5f6368] dark:text-[#9aa0a6]">No route selected.</div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+
+          <div className="shrink-0 border-t border-[#e8eaed] dark:border-[#3a3a3e] p-2">
+            <button
+              type="button"
+              onClick={() => setView('options')}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#f1f3f4] dark:bg-[#3a3a3e] px-3 py-2 text-[13px] font-medium text-[#202124] dark:text-[#e8eaed] hover:bg-[#e8eaed] dark:hover:bg-[#444448] transition-colors"
+            >
+              <Pencil size={14} />
+              Edit itinerary
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     // Cap the panel height to the viewport, leaving room for the bottom-left
     // controls (~96px), so it never runs off-screen or covers those buttons.
@@ -142,9 +300,7 @@ export default function ItineraryOptions({
             {multiLeg && (
               <button
                 type="button"
-                onClick={() => {
-                  // Placeholder: full-itinerary view is not wired up yet.
-                }}
+                onClick={() => setView('complete')}
                 className="flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium text-[#1a73e8] hover:bg-[#e8f0fe] dark:hover:bg-[#1a3a5c]"
               >
                 <ListChecks size={14} />
