@@ -727,6 +727,68 @@ async function otpTransitMinutes(from, to, date, time, { wakeBudgetMs, attemptTi
   return null;
 }
 
+// Run an arbitrary OTP GraphQL query with the same wake/retry handling used by
+// /api/otp-plan (a sleeping HF Space returns an HTML page / 5xx until ready).
+// Resolves with the parsed `data`, or throws an Error tagged `.warming` when the
+// Space never woke within budget, or `.graphqlErrors` on a GraphQL error.
+async function otpQuery(query, variables) {
+  const endpoint = `${OTP_URL.replace(/\/$/, '')}/otp/gtfs/v1`;
+  const headers = { 'Content-Type': 'application/json' };
+  if (HF_TOKEN) headers.Authorization = `Bearer ${HF_TOKEN}`;
+  const body = JSON.stringify({ query, variables });
+
+  const started = Date.now();
+  let attempt = 0;
+  let lastDetail = 'no response';
+
+  while (Date.now() - started < WAKE_RETRY_BUDGET_MS) {
+    attempt += 1;
+    try {
+      const res = await fetch(endpoint, { method: 'POST', headers, body, signal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS) });
+      const text = await res.text();
+      if (!res.ok) {
+        if (res.status >= 500) {
+          lastDetail = `HTTP ${res.status}`;
+        } else {
+          const err = new Error(`OTP request failed (${res.status}).`);
+          err.status = 502;
+          err.detail = text.slice(0, 300);
+          throw err;
+        }
+      } else {
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          lastDetail = 'non-JSON wake-up page';
+          data = null;
+        }
+        if (data) {
+          if (data.errors) {
+            const err = new Error('OTP query error.');
+            err.status = 502;
+            err.graphqlErrors = data.errors;
+            throw err;
+          }
+          return data.data;
+        }
+      }
+    } catch (err) {
+      if (err.status) throw err; // a definitive (non-retryable) error
+      lastDetail = String(err);
+    }
+    const remaining = WAKE_RETRY_BUDGET_MS - (Date.now() - started);
+    if (remaining <= 0) break;
+    await sleep(Math.min(Math.min(10_000, 2_000 * attempt), remaining));
+  }
+
+  const err = new Error('The routing server is starting up. Please try again in a moment.');
+  err.status = 503;
+  err.warming = true;
+  err.detail = lastDetail;
+  throw err;
+}
+
 // Straight-line distance beyond which two places are "obviously too far" to be
 // visited consecutively — we don't waste an OTP query on them and tell the agent
 // not to chain them.
@@ -873,6 +935,159 @@ app.post('/api/otp-plan', async (req, res) => {
     warming: true,
     detail: lastDetail,
   });
+});
+
+// Seconds from now until the end of the current transit service day, defined as
+// the next 04:00 in Vancouver (TransLink night service runs past midnight).
+// Clamped to a sane [1h, 26h] window.
+function secondsUntilServiceDayEnd() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Vancouver',
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(new Date());
+  const get = (t) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  const nowSec = (get('hour') % 24) * 3600 + get('minute') * 60 + get('second');
+  const endSec = 4 * 3600; // 04:00 service-day boundary
+  const delta = nowSec < endSec ? endSec - nowSec : 24 * 3600 - nowSec + endSec;
+  return Math.max(3600, Math.min(delta, 26 * 3600));
+}
+
+// GTFS-realtime stop-departure query. Grouped by pattern (route + direction),
+// which is exactly the "by route/line" view the UI wants.
+const STOPS_BY_RADIUS_QUERY = `
+query Stops($lat: Float!, $lon: Float!, $radius: Int!) {
+  stopsByRadius(lat: $lat, lon: $lon, radius: $radius) {
+    edges { node { stop { gtfsId name lat lon vehicleMode } distance } }
+  }
+}`;
+
+const STOP_DEPARTURES_QUERY = `
+query Deps($id: String!, $start: Long!, $range: Int!, $num: Int!) {
+  stop(id: $id) {
+    gtfsId
+    name
+    lat
+    lon
+    vehicleMode
+    stoptimesForPatterns(startTime: $start, timeRange: $range, numberOfDepartures: $num) {
+      pattern { code route { gtfsId shortName longName mode color } }
+      stoptimes {
+        scheduledDeparture
+        realtimeDeparture
+        realtime
+        realtimeState
+        serviceDay
+        headsign
+      }
+    }
+  }
+}`;
+
+// Pick the GTFS stop that best matches the tapped pin: prefer the requested
+// vehicle mode, then the nearest candidate within the search radius.
+function chooseStop(edges, mode) {
+  const candidates = edges
+    .map((e) => e.node)
+    .filter((n) => n?.stop?.gtfsId != null)
+    .sort((a, b) => (a.distance ?? 1e9) - (b.distance ?? 1e9));
+  if (candidates.length === 0) return null;
+  if (mode) {
+    const sameMode = candidates.find((c) => c.stop.vehicleMode === mode);
+    if (sameMode) return sameMode;
+  }
+  return candidates[0];
+}
+
+app.post('/api/stop-departures', async (req, res) => {
+  if (!OTP_URL) {
+    return res.status(500).json({ error: 'Server is missing OTP_URL. Add it to transit-app/.env.local.' });
+  }
+
+  const { lat, lon, mode, radius } = req.body ?? {};
+  if (lat == null || lon == null) {
+    return res.status(400).json({ error: 'lat and lon are required.' });
+  }
+  const searchRadius = Math.min(Math.max(Number(radius) || 200, 50), 500);
+
+  try {
+    // 1) Resolve the pin to a concrete GTFS stop (OSM ids don't map to GTFS).
+    const stopsData = await otpQuery(STOPS_BY_RADIUS_QUERY, { lat, lon, radius: searchRadius });
+    const edges = stopsData?.stopsByRadius?.edges ?? [];
+    const chosen = chooseStop(edges, typeof mode === 'string' ? mode : null);
+    if (!chosen) {
+      return res.status(404).json({ error: 'No transit stop found near this location.' });
+    }
+
+    // 2) Pull every departure from now until the end of the service day.
+    const start = Math.floor(Date.now() / 1000);
+    const range = secondsUntilServiceDayEnd();
+    const depData = await otpQuery(STOP_DEPARTURES_QUERY, {
+      id: chosen.stop.gtfsId,
+      start,
+      range,
+      num: 100,
+    });
+    const stop = depData?.stop;
+    if (!stop) {
+      return res.status(404).json({ error: 'Stop has no schedule data.' });
+    }
+
+    // 3) Flatten each pattern into a route group with sorted upcoming departures.
+    const nowMs = Date.now();
+    const groups = (stop.stoptimesForPatterns ?? [])
+      .map((p) => {
+        const route = p.pattern?.route ?? {};
+        const departures = (p.stoptimes ?? [])
+          .map((st) => {
+            const base = (st.serviceDay ?? 0) * 1000;
+            const scheduled = base + (st.scheduledDeparture ?? 0) * 1000;
+            const realtimeMs = base + (st.realtimeDeparture ?? st.scheduledDeparture ?? 0) * 1000;
+            return {
+              departure: st.realtime ? realtimeMs : scheduled,
+              scheduled,
+              realtime: Boolean(st.realtime),
+              realtimeState: st.realtimeState ?? 'SCHEDULED',
+              headsign: st.headsign ?? null,
+            };
+          })
+          .filter((d) => d.departure >= nowMs - 60_000)
+          .sort((a, b) => a.departure - b.departure);
+        return {
+          patternCode: p.pattern?.code ?? null,
+          routeId: route.gtfsId ?? null,
+          shortName: route.shortName ?? null,
+          longName: route.longName ?? null,
+          mode: route.mode ?? stop.vehicleMode ?? null,
+          color: route.color ?? null,
+          headsign: departures[0]?.headsign ?? null,
+          departures,
+        };
+      })
+      .filter((g) => g.departures.length > 0)
+      .sort((a, b) => a.departures[0].departure - b.departures[0].departure);
+
+    return res.json({
+      stop: {
+        gtfsId: stop.gtfsId,
+        name: stop.name,
+        lat: stop.lat,
+        lon: stop.lon,
+        mode: stop.vehicleMode ?? null,
+      },
+      routes: groups,
+      generatedAt: nowMs,
+    });
+  } catch (err) {
+    const status = err.status ?? 500;
+    console.error(`[stop-departures] ${status}: ${err.message}`, err.graphqlErrors ?? err.detail ?? '');
+    return res.status(status).json({
+      error: err.message,
+      warming: err.warming ?? undefined,
+    });
+  }
 });
 
 app.get('/api/health', (_req, res) =>

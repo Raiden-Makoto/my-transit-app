@@ -7,6 +7,7 @@ import TripPlanner from './components/TripPlanner';
 import { legTiming } from './services/tripTiming';
 import MapView, { type Bbox } from './components/MapView';
 import ItineraryOptions from './components/ItineraryOptions';
+import DeparturesPanel from './components/DeparturesPanel';
 
 // Lazy-loaded so react-markdown only loads when the AI planner is opened.
 const AiTripPlanner = lazy(() => import('./components/AiTripPlanner'));
@@ -226,6 +227,9 @@ function App() {
     setRoutePrefs(next);
     if (tripLegs) void runPlan(tripLegs, next, routeIsAi);
   };
+
+  // The transit stop whose live departures are being shown (right-side panel).
+  const [departuresStop, setDeparturesStop] = useState<SavedLocation | null>(null);
 
   const handleGetDirections = (place: SavedLocation) => {
     const origin: SavedLocation | null = position
@@ -514,7 +518,12 @@ function App() {
         onToggleSaved={savedPlaces.toggleSaved}
         onAddToList={setPickerPlace}
         onGetDirections={handleGetDirections}
+        onViewDepartures={setDeparturesStop}
       />
+
+      {departuresStop && (
+        <DeparturesPanel stop={departuresStop} onClose={() => setDeparturesStop(null)} />
+      )}
     </div>
   );
 }

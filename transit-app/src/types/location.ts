@@ -7,6 +7,8 @@ export interface SavedLocation {
     lon: number;
     /** OSM amenity/shop value when known (e.g., "restaurant", "cafe"). */
     category?: string;
+    /** OSM key when known (e.g., "amenity", "highway", "railway", "public_transport"). */
+    osmKey?: string;
   }
 
 export interface PlaceCollection {

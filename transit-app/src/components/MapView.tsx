@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
-import { Star, FolderPlus, Route } from 'lucide-react';
+import { Star, FolderPlus, Route, Clock } from 'lucide-react';
 import L from 'leaflet';
 import type { PlaceCollection, SavedLocation, TripLeg } from '../types/location';
 import type { OtpLeg } from '../services/otp';
+import { isTransitStop } from '../services/geocode';
 import rapidTransit from '../data/rapidTransit.json';
 
 export type Bbox = [number, number, number, number];
@@ -262,6 +263,7 @@ interface MapViewProps {
   onToggleSaved: (place: SavedLocation) => void;
   onAddToList: (place: SavedLocation) => void;
   onGetDirections: (place: SavedLocation) => void;
+  onViewDepartures: (place: SavedLocation) => void;
 }
 
 export default function MapView({
@@ -280,6 +282,7 @@ export default function MapView({
   onToggleSaved,
   onAddToList,
   onGetDirections,
+  onViewDepartures,
 }: MapViewProps) {
   // Memoised so the reference is stable across unrelated re-renders (e.g. map
   // pan/zoom updating the bbox); otherwise FitGeometry would refit on every
@@ -338,6 +341,12 @@ export default function MapView({
                 <Route size={14} />
                 Directions
               </button>
+              {isTransitStop(destination) && (
+                <button type="button" onClick={() => onViewDepartures(destination)} style={popupBtn()}>
+                  <Clock size={14} />
+                  View departures
+                </button>
+              )}
             </span>
           </Popup>
         </Marker>
@@ -353,10 +362,18 @@ export default function MapView({
               </>
             )}
             <br />
-            <button type="button" onClick={() => onGetDirections(place)} style={{ ...popupBtn(false, true), marginTop: 8 }}>
-              <Route size={14} />
-              Directions
-            </button>
+            <span style={{ display: 'inline-flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => onGetDirections(place)} style={popupBtn(false, true)}>
+                <Route size={14} />
+                Directions
+              </button>
+              {isTransitStop(place) && (
+                <button type="button" onClick={() => onViewDepartures(place)} style={popupBtn()}>
+                  <Clock size={14} />
+                  View departures
+                </button>
+              )}
+            </span>
           </Popup>
         </Marker>
       ))}

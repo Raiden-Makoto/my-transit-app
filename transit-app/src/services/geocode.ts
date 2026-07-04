@@ -55,7 +55,43 @@ function toSavedLocation(feature: PhotonFeature, index: number): SavedLocation {
     lat,
     lon,
     category: properties.osm_value,
+    osmKey: properties.osm_key,
   };
+}
+
+// Which OSM key+value combinations represent a boardable transit stop, mapped
+// to a coarse OTP vehicle mode used to disambiguate when resolving to a GTFS
+// stop. Order/values follow OSM's public_transport tagging conventions.
+const TRANSIT_STOP_VALUES: Record<string, Record<string, string>> = {
+  highway: { bus_stop: 'BUS' },
+  amenity: { bus_station: 'BUS', ferry_terminal: 'FERRY' },
+  railway: {
+    station: 'RAIL',
+    halt: 'RAIL',
+    stop: 'RAIL',
+    tram_stop: 'TRAM',
+    subway_entrance: 'SUBWAY',
+    platform: 'RAIL',
+  },
+  aerialway: { station: 'GONDOLA' },
+  // public_transport=* is mode-agnostic; treated as generic transit.
+  public_transport: { stop_position: '', platform: '', station: '', stop_area: '' },
+};
+
+/** True when a geocoded place is a boardable transit stop/station. */
+export function isTransitStop(loc: Pick<SavedLocation, 'osmKey' | 'category'>): boolean {
+  if (!loc.osmKey || !loc.category) return false;
+  return loc.category in (TRANSIT_STOP_VALUES[loc.osmKey] ?? {});
+}
+
+/**
+ * Coarse OTP vehicle mode for a transit stop (e.g. "BUS", "RAIL"), or null when
+ * unknown/mode-agnostic. Used only as a hint when matching to a GTFS stop.
+ */
+export function transitStopMode(loc: Pick<SavedLocation, 'osmKey' | 'category'>): string | null {
+  if (!loc.osmKey || !loc.category) return null;
+  const mode = TRANSIT_STOP_VALUES[loc.osmKey]?.[loc.category];
+  return mode ? mode : null;
 }
 
 export type SearchOptions = {
