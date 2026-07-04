@@ -1,4 +1,4 @@
-import { Footprints, Bus, TrainFront, TramFront, Ship, CableCar, ChevronRight, X, Check } from 'lucide-react';
+import { Footprints, Bus, TrainFront, TramFront, Ship, CableCar, ChevronRight, X, Check, ListChecks } from 'lucide-react';
 import { type ComponentType } from 'react';
 import type { LegPlan, OtpLeg, RoutePrefs } from '../services/otp';
 
@@ -138,14 +138,28 @@ export default function ItineraryOptions({
           <span className="text-[12px] font-semibold uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6]">
             {loading ? 'Finding routes…' : multiLeg ? `Trip · ${legPlans.length} legs` : 'Route'}
           </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex items-center justify-center rounded-full p-1 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]"
-            aria-label="Clear route"
-          >
-            <X size={16} />
-          </button>
+          <div className="flex items-center gap-1">
+            {multiLeg && (
+              <button
+                type="button"
+                onClick={() => {
+                  // Placeholder: full-itinerary view is not wired up yet.
+                }}
+                className="flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium text-[#1a73e8] hover:bg-[#e8f0fe] dark:hover:bg-[#1a3a5c]"
+              >
+                <ListChecks size={14} />
+                View complete itinerary
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center justify-center rounded-full p-1 text-[#5f6368] dark:text-[#9aa0a6] hover:bg-[#f1f3f4] dark:hover:bg-[#3a3a3e]"
+              aria-label="Clear route"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         {error ? (
