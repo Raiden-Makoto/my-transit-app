@@ -418,17 +418,17 @@ function App() {
         </div>
       )}
 
-      {/* Float the "complete itinerary" toggle in the top-right of the whole
-          map (multi-leg trips only). Hidden while the summary is already open. */}
-      {legPlans && legPlans.length > 1 && !routing && !routeError && itineraryView === 'options' && (
+      {/* Float the step-by-step "directions" toggle in the top-right of the map
+          for any planned trip. Hidden while the directions view is already open. */}
+      {legPlans && legPlans.length > 0 && !routing && !routeError && itineraryView === 'options' && (
         <button
           type="button"
           onClick={() => setItineraryView('complete')}
           className="absolute top-3 right-3 z-[1000] flex items-center gap-1.5 h-10 px-4 bg-white dark:bg-[#2a2a2e] rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.3)] text-[14px] font-medium text-[#1a73e8] hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-shadow font-sans"
-          aria-label="View complete itinerary"
+          aria-label="View directions"
         >
           <ListChecks size={18} />
-          View complete itinerary
+          View directions
         </button>
       )}
 

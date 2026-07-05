@@ -132,7 +132,7 @@ function AlertItem({ alert }: { alert: OtpAlert }) {
 }
 
 // One line-item in the complete-itinerary step list.
-function StepRow({ leg, isLast }: { leg: OtpLeg; isLast: boolean }) {
+function StepRow({ leg }: { leg: OtpLeg }) {
   const Icon = MODE_ICON[leg.mode] ?? Bus;
   const mins = Math.max(1, Math.round(leg.duration / 60));
 
@@ -143,8 +143,10 @@ function StepRow({ leg, isLast }: { leg: OtpLeg; isLast: boolean }) {
           <Icon size={14} />
         </span>
         <div className="min-w-0 pb-1">
-          <div className="text-[13px] font-medium text-[#202124] dark:text-[#e8eaed]">Walk {mins} min</div>
-          {!isLast && (
+          <div className="text-[13px] font-medium text-[#202124] dark:text-[#e8eaed]">
+            Walk {mins} min{leg.distance ? ` (${fmtWalk(leg.distance)})` : ''}
+          </div>
+          {leg.to?.name && (
             <div className="truncate text-[12px] text-[#5f6368] dark:text-[#9aa0a6]">to {leg.to.name}</div>
           )}
         </div>
@@ -279,7 +281,9 @@ export default function ItineraryOptions({
 
   // The chosen itinerary for each leg, in order — what the summary lists.
   const chosenPerLeg = legPlans.map((plan) => plan.options[plan.selected] ?? null);
-  const summaryReady = multiLeg && !loading && !error && legPlans.length > 0;
+  // Step-by-step directions are available for every planned trip, not just
+  // multi-leg ones — a single walk+bus trip still needs to say *where* to walk.
+  const summaryReady = !loading && !error && legPlans.length > 0;
 
   if (view === 'complete' && summaryReady) {
     return (
@@ -287,7 +291,7 @@ export default function ItineraryOptions({
         <div className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-white dark:bg-[#2a2a2e] shadow-[0_1px_4px_rgba(0,0,0,0.3)]">
           <div className="flex shrink-0 items-center justify-between px-3 py-2 border-b border-[#e8eaed] dark:border-[#3a3a3e]">
             <span className="text-[12px] font-semibold uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6]">
-              Complete itinerary
+              {multiLeg ? 'Complete itinerary' : 'Directions'}
             </span>
             <button
               type="button"
@@ -327,7 +331,7 @@ export default function ItineraryOptions({
                     >
                       <div className="mb-1 flex items-baseline justify-between gap-2">
                         <span className="text-[11px] font-semibold uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6]">
-                          Leg {i + 1}
+                          {multiLeg ? `Leg ${i + 1}` : 'Route'}
                         </span>
                         {chosen && (
                           <span className="text-[11px] text-[#5f6368] dark:text-[#9aa0a6]">
@@ -345,7 +349,7 @@ export default function ItineraryOptions({
                       {chosen && chosen.legs.length > 0 ? (
                         <ol className="flex flex-col gap-1.5 border-l-2 border-[#e8eaed] dark:border-[#3a3a3e] pl-3">
                           {chosen.legs.map((leg, j) => (
-                            <StepRow key={j} leg={leg} isLast={j === chosen.legs.length - 1} />
+                            <StepRow key={j} leg={leg} />
                           ))}
                         </ol>
                       ) : (
