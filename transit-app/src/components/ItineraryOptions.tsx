@@ -99,6 +99,19 @@ function effectLabel(effect: string | null): string {
   return EFFECT_LABEL[effect] ?? effect.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 }
 
+// Count of unique alerts across a set of legs (an itinerary), de-duped by
+// id/header — the same detour is often attached to several legs.
+function countAlerts(legs: OtpLeg[]): number {
+  const seen = new Set<string>();
+  for (const leg of legs) {
+    for (const a of leg.alerts ?? []) {
+      const key = a.id || a.header || '';
+      if (key) seen.add(key);
+    }
+  }
+  return seen.size;
+}
+
 // A single amber service-alert row (Google-Maps style): effect tag + text.
 function AlertItem({ alert }: { alert: OtpAlert }) {
   const text = alert.header || alert.description || 'Service alert';
@@ -442,6 +455,7 @@ export default function ItineraryOptions({
               <ul className="themed-scroll min-h-0 flex-1 overflow-y-auto">
                 {activePlan?.options.map((opt, i) => {
                   const isSelected = i === activePlan.selected;
+                  const alertCount = countAlerts(opt.legs);
                   // The first live transit leg is the one you board first, so its
                   // delay is the most relevant "when does my trip really start".
                   const liveLeg = opt.legs.find(isLiveLeg) ?? null;
@@ -477,6 +491,12 @@ export default function ItineraryOptions({
                         {liveLeg && (
                           <div className="mt-1.5">
                             <LiveBadge delaySec={liveLeg.departureDelay} />
+                          </div>
+                        )}
+                        {alertCount > 0 && (
+                          <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-[#b06000] dark:text-[#fdd663]">
+                            <TriangleAlert size={12} />
+                            {alertCount} service alert{alertCount === 1 ? '' : 's'}
                           </div>
                         )}
                       </button>
