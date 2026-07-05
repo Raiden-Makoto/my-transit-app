@@ -65,6 +65,8 @@ upstream responses for the client. The browser only ever talks to `/api/*`.
 - A Hugging Face access token with the *Inference Providers* permission
   (for the AI planner) — [create one here](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained).
 - Access to an OpenTripPlanner instance (e.g. a Hugging Face Space).
+- A [TransLink developer API key](https://developer.translink.ca/) — required
+  for realtime departures and service alerts.
 
 ### Setup
 
@@ -79,9 +81,9 @@ Fill in `.env.local` (loaded by the API server, never exposed to the browser):
 | --- | --- | --- |
 | `HF_TOKEN` | yes | Hugging Face token; also used to reach a private OTP Space. |
 | `OTP_URL` | yes | OpenTripPlanner base URL (no trailing path). |
+| `TRANSLINK_API_KEY` | yes | Required for realtime departures and service alerts — the OpenTripPlanner backend uses it to poll TransLink's GTFS-Realtime feeds. [Get one here](https://developer.translink.ca/). |
 | `HF_MODEL` | no | Chat model on the HF router (default: `meta-llama/Llama-3.3-70B-Instruct`). |
 | `PORT` | no | API server port (default: `8787`). |
-| `TRANSLINK_API_KEY` | no | Reserved for direct TransLink API access. |
 
 > Gated models (e.g. Llama) require accepting the license once on the model page
 > while logged in to your Hugging Face account.
