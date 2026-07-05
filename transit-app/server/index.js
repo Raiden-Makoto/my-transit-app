@@ -1472,6 +1472,11 @@ app.get('/api/health', (_req, res) =>
   res.json({ ok: true, model: HF_MODEL, hasToken: Boolean(HF_TOKEN), otp: Boolean(OTP_URL) }),
 );
 
-app.listen(PORT, () => {
-  console.log(`[trip-planner] API listening on http://localhost:${PORT} (model: ${HF_MODEL})`);
-});
+export default app;
+
+// Local dev only (`npm run server` / `dev:all`). On Vercel, `api/index.js` imports this app.
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`[trip-planner] API listening on http://localhost:${PORT} (model: ${HF_MODEL})`);
+  });
+}
