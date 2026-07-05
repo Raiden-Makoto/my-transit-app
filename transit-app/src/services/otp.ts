@@ -7,6 +7,7 @@ export interface OtpPlace {
 }
 
 export interface OtpRoute {
+  gtfsId?: string | null;
   shortName?: string;
   longName?: string;
   color?: string;
@@ -35,6 +36,7 @@ export interface OtpLeg {
   departureDelay?: number | null; // seconds vs schedule at boarding; + = late
   arrivalDelay?: number | null; // seconds vs schedule at alighting; + = late
   headsign?: string | null; // transit destination sign, e.g. "99 B-Line/To UBC"
+  tripId?: string | null; // GTFS trip id serving this leg (for live-vehicle lookup)
   numStops?: number | null; // stops travelled on a transit leg
   from: OtpPlace;
   to: OtpPlace;
@@ -137,6 +139,47 @@ export async function fetchRouteStatus(): Promise<RouteStatusResponse | null> {
   } catch (err) {
     console.warn('[otp] route-status fetch failed', err);
     return null;
+  }
+}
+
+/** Live position of a transit vehicle currently operating a planned leg's trip. */
+export interface VehiclePosition {
+  tripId: string;
+  routeId: string;
+  shortName: string | null;
+  longName: string | null;
+  color: string | null; // GTFS route colour hex (no leading #)
+  mode: string | null;
+  lat: number;
+  lon: number;
+  heading: number | null; // degrees; often null (TransLink omits bearing)
+  label: string | null; // vehicle label / fleet number
+  status: string | null; // INCOMING_AT | STOPPED_AT | IN_TRANSIT_TO
+  stopName: string | null; // the stop the vehicle is heading to / at
+  lastUpdated: number | null; // epoch seconds
+}
+
+/**
+ * Fetch the live vehicles operating the given transit legs' trips. Legs with no
+ * active vehicle (not yet dispatched, or a mode with no realtime feed) are
+ * omitted. Returns [] on any failure so polling never breaks the map.
+ */
+export async function fetchVehiclePositions(
+  legs: { routeId: string; tripId: string }[],
+): Promise<VehiclePosition[]> {
+  if (legs.length === 0) return [];
+  try {
+    const res = await fetch('/api/vehicle-positions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ legs }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.vehicles) ? (data.vehicles as VehiclePosition[]) : [];
+  } catch (err) {
+    console.warn('[otp] vehicle-positions fetch failed', err);
+    return [];
   }
 }
 

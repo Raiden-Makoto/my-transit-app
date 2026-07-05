@@ -629,7 +629,8 @@ query Plan($from: InputCoordinates!, $to: InputCoordinates!, $date: String, $tim
         headsign
         from { name lat lon }
         to { name lat lon }
-        route { shortName longName color textColor }
+        route { gtfsId shortName longName color textColor }
+        trip { gtfsId }
         intermediateStops { name }
         legGeometry { points }
         alerts {
@@ -678,8 +679,12 @@ function mapItineraries(data) {
       numStops: Array.isArray(leg.intermediateStops) ? leg.intermediateStops.length + 1 : null,
       from: leg.from,
       to: leg.to,
+      // The specific GTFS trip served by this leg — used to locate the live
+      // vehicle currently operating it (see /api/vehicle-positions).
+      tripId: leg.trip?.gtfsId ?? null,
       route: leg.route
         ? {
+            gtfsId: leg.route.gtfsId ?? null,
             shortName: leg.route.shortName,
             longName: leg.route.longName,
             color: leg.route.color,
@@ -1377,6 +1382,115 @@ app.get('/api/route-status', async (_req, res) => {
     nowSec: ctx.nowSec,
     routes,
   });
+});
+
+// --- Live vehicle positions (where's my bus right now?) -------------------
+
+// Single-shot OTP GraphQL query with a short timeout and no wake/retry loop.
+// Vehicle positions are polled every ~30s while a route is on screen, so the
+// Space is already awake; a slow/failed poll should fail fast (returns null)
+// rather than block for the 2-minute cold-start budget.
+async function otpQueryOnce(query, variables, timeoutMs = 8000) {
+  const endpoint = `${OTP_URL.replace(/\/$/, '')}/otp/gtfs/v1`;
+  const headers = { 'Content-Type': 'application/json' };
+  if (HF_TOKEN) headers.Authorization = `Bearer ${HF_TOKEN}`;
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    return data && !data.errors ? data.data : null;
+  } catch {
+    return null;
+  }
+}
+
+const VEHICLE_POSITIONS_QUERY = `
+query Vehicles($id: String!) {
+  route(id: $id) {
+    gtfsId
+    shortName
+    longName
+    color
+    mode
+    patterns {
+      vehiclePositions {
+        vehicleId
+        label
+        lat
+        lon
+        heading
+        lastUpdated
+        trip { gtfsId }
+        stopRelationship { status stop { name } }
+      }
+    }
+  }
+}`;
+
+// Given the transit legs of a shown itinerary ({ routeId, tripId }), return the
+// live vehicle currently operating each leg's trip (exact GTFS trip match). A
+// trip with no active vehicle (not yet dispatched, or SkyTrain with no RT feed)
+// is simply omitted — we only ever show the actual bus you're taking.
+app.post('/api/vehicle-positions', async (req, res) => {
+  if (!OTP_URL) {
+    return res.status(500).json({ error: 'Server is missing OTP_URL. Add it to transit-app/.env.local.' });
+  }
+
+  const legs = Array.isArray(req.body?.legs) ? req.body.legs : [];
+  const wanted = legs
+    .filter((l) => l && typeof l.routeId === 'string' && typeof l.tripId === 'string')
+    .map((l) => ({ routeId: l.routeId, tripId: l.tripId }));
+  if (wanted.length === 0) return res.json({ vehicles: [], generatedAt: Date.now() });
+
+  const routeIds = [...new Set(wanted.map((w) => w.routeId))];
+
+  // One query per distinct route; build a tripId -> vehicle+route lookup.
+  const vehicleByTrip = new Map();
+  await Promise.all(
+    routeIds.map(async (routeId) => {
+      const data = await otpQueryOnce(VEHICLE_POSITIONS_QUERY, { id: routeId });
+      const route = data?.route;
+      if (!route) return;
+      for (const p of route.patterns ?? []) {
+        for (const v of p.vehiclePositions ?? []) {
+          const tid = v.trip?.gtfsId;
+          if (!tid || v.lat == null || v.lon == null) continue;
+          vehicleByTrip.set(tid, {
+            routeId,
+            shortName: route.shortName ?? null,
+            longName: route.longName ?? null,
+            color: route.color ?? null,
+            mode: route.mode ?? null,
+            lat: v.lat,
+            lon: v.lon,
+            heading: v.heading ?? null,
+            label: v.label ?? v.vehicleId ?? null,
+            status: v.stopRelationship?.status ?? null,
+            stopName: v.stopRelationship?.stop?.name ?? null,
+            lastUpdated: v.lastUpdated ?? null,
+          });
+        }
+      }
+    }),
+  );
+
+  const vehicles = [];
+  const seen = new Set();
+  for (const w of wanted) {
+    if (seen.has(w.tripId)) continue;
+    const v = vehicleByTrip.get(w.tripId);
+    if (v) {
+      seen.add(w.tripId);
+      vehicles.push({ tripId: w.tripId, ...v });
+    }
+  }
+
+  return res.json({ vehicles, generatedAt: Date.now() });
 });
 
 app.get('/api/health', (_req, res) =>

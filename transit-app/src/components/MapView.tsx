@@ -4,6 +4,7 @@ import { FolderPlus, Route, Clock } from 'lucide-react';
 import L from 'leaflet';
 import type { PlaceCollection, SavedLocation, TripLeg } from '../types/location';
 import type { OtpLeg, RouteStatus } from '../services/otp';
+import { fetchVehiclePositions, type VehiclePosition } from '../services/otp';
 import { isTransitStop } from '../services/geocode';
 import rapidTransit from '../data/rapidTransit.json';
 
@@ -117,6 +118,79 @@ function TransitCorridors({ routeStatus }: { routeStatus: RouteStatusMap | null 
   );
 }
 
+// Human-readable phrasing for a vehicle's stop relationship.
+function vehicleStatusLabel(status: string | null): string {
+  switch (status) {
+    case 'STOPPED_AT':
+      return 'At';
+    case 'INCOMING_AT':
+      return 'Approaching';
+    default:
+      return 'Heading to';
+  }
+}
+
+// Live bus markers for the transit legs of the shown itinerary. Polls every 30s
+// (only while a route is on screen) and drops a pulsing bus at each leg's
+// vehicle's current position. Legs whose trip has no live vehicle show nothing.
+function LiveVehicles({ otpLegs }: { otpLegs: OtpLeg[] | null }) {
+  const [vehicles, setVehicles] = useState<VehiclePosition[]>([]);
+
+  // Serialize the trackable legs so the poller only resets when the actual
+  // trips change — not on every unrelated map re-render.
+  const legsKey = useMemo(
+    () =>
+      (otpLegs ?? [])
+        .filter((l) => l.mode !== 'WALK' && l.route?.gtfsId && l.tripId)
+        .map((l) => `${l.route!.gtfsId}|${l.tripId}`)
+        .join(','),
+    [otpLegs],
+  );
+
+  useEffect(() => {
+    const legs = legsKey
+      ? legsKey.split(',').map((s) => {
+          const [routeId, tripId] = s.split('|');
+          return { routeId, tripId };
+        })
+      : [];
+    let active = true;
+    // fetchVehiclePositions([]) resolves to [], so this also clears stale
+    // markers when the route is cleared — without a synchronous setState.
+    const poll = async () => {
+      const v = await fetchVehiclePositions(legs);
+      if (active) setVehicles(v);
+    };
+    poll();
+    const id = legs.length > 0 ? window.setInterval(poll, 30_000) : undefined;
+    return () => {
+      active = false;
+      if (id) window.clearInterval(id);
+    };
+  }, [legsKey]);
+
+  return (
+    <>
+      {vehicles.map((v) => {
+        const color = v.color ? `#${v.color}` : MODE_COLOR[v.mode ?? ''] ?? '#1a73e8';
+        return (
+          <Marker key={v.tripId} position={[v.lat, v.lon]} icon={vehicleIcon(color)} zIndexOffset={1000}>
+            <Popup>
+              <strong>{v.shortName || v.longName || 'Vehicle'}</strong>
+              {v.stopName && (
+                <div style={{ marginTop: 2 }}>
+                  {vehicleStatusLabel(v.status)} {v.stopName}
+                </div>
+              )}
+              {v.label && <div style={{ color: '#5f6368', marginTop: 2 }}>Vehicle {v.label}</div>}
+            </Popup>
+          </Marker>
+        );
+      })}
+    </>
+  );
+}
+
 // Build a teardrop map-pin marker in an arbitrary color so list pins can
 // match their list's color.
 function coloredPinIcon(color: string) {
@@ -129,6 +203,27 @@ function coloredPinIcon(color: string) {
     iconSize: [26, 38],
     iconAnchor: [13, 38],
     popupAnchor: [0, -32],
+  });
+}
+
+// A live-vehicle marker: a coloured circular badge with a bus glyph and a
+// pulsing ring, so a moving bus reads as "live" and matches its route colour.
+function vehicleIcon(color: string) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="position:relative;width:30px;height:30px">
+      <span style="position:absolute;inset:0;border-radius:50%;background:${color};opacity:0.35;animation:vehiclePing 1.8s cubic-bezier(0,0,0.2,1) infinite"></span>
+      <div style="position:absolute;inset:3px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.45)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 6v6"/><path d="M15 6v6"/><path d="M2 12h19.6"/>
+          <path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3"/>
+          <circle cx="7" cy="18" r="2"/><path d="M9 18h5"/><circle cx="16" cy="18" r="2"/>
+        </svg>
+      </div>
+    </div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -14],
   });
 }
 
@@ -401,6 +496,8 @@ export default function MapView({
               <Polyline key={`otp_${i}`} positions={leg.geometry} pathOptions={otpLegStyle(leg)} />
             ) : null,
           )}
+          {/* Live buses currently operating this itinerary's transit legs. */}
+          <LiveVehicles otpLegs={otpLegs} />
         </>
       ) : // Only fall back to straight lines once routing has finished without a
       // result (no route / error). During routing we draw nothing so the
