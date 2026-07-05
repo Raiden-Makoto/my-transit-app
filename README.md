@@ -71,6 +71,7 @@ upstream responses for the client. The browser only ever talks to `/api/*`.
 ### Setup
 
 ```bash
+cd transit-app
 npm install
 cp .env.example .env.local
 ```
