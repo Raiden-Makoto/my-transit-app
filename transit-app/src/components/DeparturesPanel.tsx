@@ -199,6 +199,7 @@ export default function DeparturesPanel({ stop, onClose }: { stop: SavedLocation
                   <div className="flex flex-wrap gap-1.5">
                     {shown.map((d, j) => {
                       const canceled = d.realtimeState === 'CANCELED';
+                      const late = d.realtime && !canceled && Math.round((d.departure - d.scheduled) / 60_000) > 0;
                       const delay = delayLabel(d);
                       return (
                         <span
@@ -207,9 +208,11 @@ export default function DeparturesPanel({ stop, onClose }: { stop: SavedLocation
                           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium ${
                             canceled
                               ? 'bg-[#fce8e6] text-[#d93025] line-through dark:bg-[#3a2a2a]'
-                              : d.realtime
-                                ? 'bg-[#e6f4ea] text-[#137333] dark:bg-[#1e3a2a] dark:text-[#81c995]'
-                                : 'bg-[#f1f3f4] text-[#202124] dark:bg-[#3a3a3e] dark:text-[#e8eaed]'
+                              : late
+                                ? 'bg-[#fce8e6] text-[#d93025] dark:bg-[#3a2a2a] dark:text-[#f28b82]'
+                                : d.realtime
+                                  ? 'bg-[#e6f4ea] text-[#137333] dark:bg-[#1e3a2a] dark:text-[#81c995]'
+                                  : 'bg-[#f1f3f4] text-[#202124] dark:bg-[#3a3a3e] dark:text-[#e8eaed]'
                           }`}
                         >
                           {d.realtime && !canceled && <Radio size={11} className="animate-pulse" />}
