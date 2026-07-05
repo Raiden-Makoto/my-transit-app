@@ -118,18 +118,6 @@ function TransitCorridors({ routeStatus }: { routeStatus: RouteStatusMap | null 
   );
 }
 
-// Human-readable phrasing for a vehicle's stop relationship.
-function vehicleStatusLabel(status: string | null): string {
-  switch (status) {
-    case 'STOPPED_AT':
-      return 'At';
-    case 'INCOMING_AT':
-      return 'Approaching';
-    default:
-      return 'Heading to';
-  }
-}
-
 // Live bus markers for the transit legs of the shown itinerary. Polls every 30s
 // (only while a route is on screen) and drops a pulsing bus at each leg's
 // vehicle's current position. Legs whose trip has no live vehicle show nothing.
@@ -177,11 +165,7 @@ function LiveVehicles({ otpLegs }: { otpLegs: OtpLeg[] | null }) {
           <Marker key={v.tripId} position={[v.lat, v.lon]} icon={vehicleIcon(color)} zIndexOffset={1000}>
             <Popup>
               <strong>{v.shortName || v.longName || 'Vehicle'}</strong>
-              {v.stopName && (
-                <div style={{ marginTop: 2 }}>
-                  {vehicleStatusLabel(v.status)} {v.stopName}
-                </div>
-              )}
+              {v.stopName && <div style={{ marginTop: 2 }}>Next stop: {v.stopName}</div>}
               {v.label && <div style={{ color: '#5f6368', marginTop: 2 }}>Vehicle {v.label}</div>}
             </Popup>
           </Marker>
@@ -214,10 +198,11 @@ function vehicleIcon(color: string) {
     html: `<div style="position:relative;width:30px;height:30px">
       <span style="position:absolute;inset:0;border-radius:50%;background:${color};opacity:0.35;animation:vehiclePing 1.8s cubic-bezier(0,0,0.2,1) infinite"></span>
       <div style="position:absolute;inset:3px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.45)">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M8 6v6"/><path d="M15 6v6"/><path d="M2 12h19.6"/>
-          <path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3"/>
-          <circle cx="7" cy="18" r="2"/><path d="M9 18h5"/><circle cx="16" cy="18" r="2"/>
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 6 2 7"/><path d="M10 6h4"/><path d="m22 7-2-1"/>
+          <rect width="16" height="16" x="4" y="3" rx="2"/>
+          <path d="M4 11h16"/><path d="M8 15h.01"/><path d="M16 15h.01"/>
+          <path d="M6 19v2"/><path d="M18 21v-2"/>
         </svg>
       </div>
     </div>`,
