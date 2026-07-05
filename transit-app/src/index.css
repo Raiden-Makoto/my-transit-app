@@ -114,7 +114,6 @@ body {
   background-color: #74797d;
 }
 
-/* Expanding pulse ring behind a live vehicle marker (see vehicleIcon). */
 @keyframes vehiclePing {
   0% {
     transform: scale(1);

@@ -10,7 +10,6 @@ import rapidTransit from '../data/rapidTransit.json';
 
 export type Bbox = [number, number, number, number];
 
-// Operating status per corridor line, keyed by the feature `name`.
 export type RouteStatusMap = Record<string, RouteStatus>;
 
 type CorridorMode = 'skytrain' | 'wce' | 'seabus' | 'rapidbus' | 'bline';
@@ -94,9 +93,7 @@ function TransitCorridors({ routeStatus }: { routeStatus: RouteStatusMap | null 
   return (
     <>
       {(rapidTransit.features as CorridorFeature[])
-        // Hide a line only when we KNOW it isn't running now (operating === false).
-        // Unknown/unloaded status keeps the line visible so a lookup hiccup never
-        // blanks the map.
+        // Hide a line only when it's known to be out of service.
         .filter((f) => !routeStatus || routeStatus[f.properties.name]?.operating !== false)
         .map((f, i) => {
         const base = CORRIDOR_STYLE[f.properties.mode as CorridorMode];
@@ -118,14 +115,12 @@ function TransitCorridors({ routeStatus }: { routeStatus: RouteStatusMap | null 
   );
 }
 
-// Live bus markers for the transit legs of the shown itinerary. Polls every 30s
-// (only while a route is on screen) and drops a pulsing bus at each leg's
-// vehicle's current position. Legs whose trip has no live vehicle show nothing.
+// Pulsing bus markers for the transit legs of the shown itinerary, polled every
+// 30s. Legs whose trip has no live vehicle show nothing.
 function LiveVehicles({ otpLegs }: { otpLegs: OtpLeg[] | null }) {
   const [vehicles, setVehicles] = useState<VehiclePosition[]>([]);
 
-  // Serialize the trackable legs so the poller only resets when the actual
-  // trips change — not on every unrelated map re-render.
+  // Serialize trackable legs so the poller resets only when the trips change.
   const legsKey = useMemo(
     () =>
       (otpLegs ?? [])
@@ -143,8 +138,7 @@ function LiveVehicles({ otpLegs }: { otpLegs: OtpLeg[] | null }) {
         })
       : [];
     let active = true;
-    // fetchVehiclePositions([]) resolves to [], so this also clears stale
-    // markers when the route is cleared — without a synchronous setState.
+    // fetchVehiclePositions([]) resolves to [], clearing stale markers too.
     const poll = async () => {
       const v = await fetchVehiclePositions(legs);
       if (active) setVehicles(v);
@@ -190,8 +184,7 @@ function coloredPinIcon(color: string) {
   });
 }
 
-// A live-vehicle marker: a coloured circular badge with a bus glyph and a
-// pulsing ring, so a moving bus reads as "live" and matches its route colour.
+// A route-coloured bus badge with a pulsing ring, marking a live vehicle.
 function vehicleIcon(color: string) {
   return L.divIcon({
     className: '',
@@ -481,7 +474,6 @@ export default function MapView({
               <Polyline key={`otp_${i}`} positions={leg.geometry} pathOptions={otpLegStyle(leg)} />
             ) : null,
           )}
-          {/* Live buses currently operating this itinerary's transit legs. */}
           <LiveVehicles otpLegs={otpLegs} />
         </>
       ) : // Only fall back to straight lines once routing has finished without a

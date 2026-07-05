@@ -36,7 +36,7 @@ export interface OtpLeg {
   departureDelay?: number | null; // seconds vs schedule at boarding; + = late
   arrivalDelay?: number | null; // seconds vs schedule at alighting; + = late
   headsign?: string | null; // transit destination sign, e.g. "99 B-Line/To UBC"
-  tripId?: string | null; // GTFS trip id serving this leg (for live-vehicle lookup)
+  tripId?: string | null;
   numStops?: number | null; // stops travelled on a transit leg
   from: OtpPlace;
   to: OtpPlace;
@@ -103,30 +103,20 @@ export function prefsToModes(prefs: RoutePrefs): string[] {
   return modes;
 }
 
-/** Operating status of one transit line at the current Pacific time. */
 export interface RouteStatus {
-  /** true = running now, false = not running now, null = unknown (lookup failed). */
-  operating: boolean | null;
-  /** Today's first departure, seconds from local midnight (null if not running today). */
-  todayStart: number | null;
-  /** Today's last arrival, seconds from local midnight; may exceed 86400 for after-midnight service. */
-  todayEnd: number | null;
+  operating: boolean | null; // true = running, false = not, null = unknown
+  todayStart: number | null; // seconds from local midnight
+  todayEnd: number | null; // may exceed 86400 for after-midnight service
 }
 
 export interface RouteStatusResponse {
   generatedAt: number;
   timezone: string;
-  serviceDate: string; // YYYYMMDD
+  serviceDate: string;
   nowSec: number;
-  /** Keyed by the corridor line name (matches rapidTransit.json `name`). */
-  routes: Record<string, RouteStatus>;
+  routes: Record<string, RouteStatus>; // keyed by rapidTransit.json `name`
 }
 
-/**
- * Fetch which transit lines are operating right now (Pacific time), so the map
- * overlay and legend can hide lines that aren't in service (e.g. NightBus only
- * shows in the early AM). Returns null if the backend is unavailable.
- */
 export async function fetchRouteStatus(): Promise<RouteStatusResponse | null> {
   try {
     const res = await fetch('/api/route-status');
@@ -142,28 +132,22 @@ export async function fetchRouteStatus(): Promise<RouteStatusResponse | null> {
   }
 }
 
-/** Live position of a transit vehicle currently operating a planned leg's trip. */
 export interface VehiclePosition {
   tripId: string;
   routeId: string;
   shortName: string | null;
   longName: string | null;
-  color: string | null; // GTFS route colour hex (no leading #)
+  color: string | null; // hex, no leading #
   mode: string | null;
   lat: number;
   lon: number;
-  heading: number | null; // degrees; often null (TransLink omits bearing)
-  label: string | null; // vehicle label / fleet number
-  status: string | null; // INCOMING_AT | STOPPED_AT | IN_TRANSIT_TO
-  stopName: string | null; // the stop the vehicle is heading to / at
+  heading: number | null;
+  label: string | null; // fleet number
+  status: string | null;
+  stopName: string | null;
   lastUpdated: number | null; // epoch seconds
 }
 
-/**
- * Fetch the live vehicles operating the given transit legs' trips. Legs with no
- * active vehicle (not yet dispatched, or a mode with no realtime feed) are
- * omitted. Returns [] on any failure so polling never breaks the map.
- */
 export async function fetchVehiclePositions(
   legs: { routeId: string; tripId: string }[],
 ): Promise<VehiclePosition[]> {

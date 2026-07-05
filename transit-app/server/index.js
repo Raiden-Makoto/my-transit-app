@@ -679,8 +679,6 @@ function mapItineraries(data) {
       numStops: Array.isArray(leg.intermediateStops) ? leg.intermediateStops.length + 1 : null,
       from: leg.from,
       to: leg.to,
-      // The specific GTFS trip served by this leg — used to locate the live
-      // vehicle currently operating it (see /api/vehicle-positions).
       tripId: leg.trip?.gtfsId ?? null,
       route: leg.route
         ? {
@@ -1237,11 +1235,9 @@ app.post('/api/stop-departures', async (req, res) => {
   }
 });
 
-// --- Route operating status (is a line running right now?) ----------------
+// --- Route operating status -----------------------------------------------
 
-// Corridor legend lines -> their GTFS route id. Keyed by the exact `name` used
-// in src/data/rapidTransit.json so the client can filter the map overlay and
-// legend by whichever lines are actually in service at the current PST time.
+// Corridor legend lines -> GTFS route id (keyed by rapidTransit.json `name`).
 const CORRIDOR_ROUTE_IDS = {
   'Expo Line': '1:30053',
   'Millennium Line': '1:30052',
@@ -1257,10 +1253,6 @@ const CORRIDOR_ROUTE_IDS = {
   '99 B-Line': '1:6641',
 };
 
-// All trips on a route with only their first departure + last arrival (seconds
-// from service-day midnight; values > 86400 = after-midnight service) and the
-// calendar dates each trip runs. That's enough to derive a per-date operating
-// window without pulling every intermediate stoptime.
 const ROUTE_TRIPS_QUERY = `
 query RouteTrips($id: String!) {
   route(id: $id) {
@@ -1276,13 +1268,9 @@ query RouteTrips($id: String!) {
   }
 }`;
 
-// GTFS is static and only changes when a new feed is loaded, so the per-date
-// operating windows are safe to cache for a long while.
 const ROUTE_WINDOW_TTL_MS = 6 * 60 * 60 * 1000;
-const routeWindowCache = new Map(); // routeId -> { fetchedAt, windows: Map<YYYYMMDD, {minDep,maxArr}> }
+const routeWindowCache = new Map();
 
-// Build (and cache) a map of serviceDate -> {minDep, maxArr} for a route by
-// scanning every trip's first-departure/last-arrival across its active dates.
 async function getRouteWindows(routeId) {
   const cached = routeWindowCache.get(routeId);
   if (cached && Date.now() - cached.fetchedAt < ROUTE_WINDOW_TTL_MS) return cached.windows;
@@ -1305,9 +1293,8 @@ async function getRouteWindows(routeId) {
   return windows;
 }
 
-// Current Pacific-time service context: today's + yesterday's GTFS service dates
-// (YYYYMMDD) and seconds since local midnight. Yesterday matters because late-
-// night trips belong to the previous service day with times > 24:00.
+// Today's + yesterday's Pacific service dates (YYYYMMDD) and seconds since local
+// midnight. Yesterday covers after-midnight trips (times > 24:00).
 function pacificServiceContext() {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Vancouver',
@@ -1323,7 +1310,7 @@ function pacificServiceContext() {
   const y = get('year');
   const mo = get('month');
   const d = get('day');
-  const hour = get('hour') % 24; // Intl can emit "24" at midnight
+  const hour = get('hour') % 24;
   const nowSec = hour * 3600 + get('minute') * 60 + get('second');
   const ymd = (dt) =>
     `${dt.getUTCFullYear()}${pad2(dt.getUTCMonth() + 1)}${pad2(dt.getUTCDate())}`;
@@ -1333,9 +1320,6 @@ function pacificServiceContext() {
   return { today: ymd(todayUtc), yesterday: ymd(yesterdayUtc), nowSec };
 }
 
-// A route is operating "now" if the current time falls inside today's service
-// window, OR inside yesterday's window shifted past midnight (overnight service
-// like NightBus, or SkyTrain's ~01:00 tail).
 function evaluateOperating(windows, ctx) {
   const today = windows.get(ctx.today);
   if (today && ctx.nowSec >= today.minDep && ctx.nowSec <= today.maxArr) return true;
@@ -1361,14 +1345,10 @@ app.get('/api/route-status', async (_req, res) => {
         const today = windows.get(ctx.today) ?? null;
         routes[name] = {
           operating: evaluateOperating(windows, ctx),
-          // Today's service window (seconds from local midnight) for display,
-          // e.g. 18360 -> 5:06 AM. null when the line doesn't run today at all.
           todayStart: today && Number.isFinite(today.minDep) ? today.minDep : null,
           todayEnd: today && Number.isFinite(today.maxArr) ? today.maxArr : null,
         };
       } catch (err) {
-        // A single failing route shouldn't blank the whole overlay; report it as
-        // "unknown" (operating: null) so the client can keep it visible.
         console.warn(`[route-status] ${name} failed: ${err.message}`);
         routes[name] = { operating: null, todayStart: null, todayEnd: null };
       }
@@ -1384,12 +1364,10 @@ app.get('/api/route-status', async (_req, res) => {
   });
 });
 
-// --- Live vehicle positions (where's my bus right now?) -------------------
+// --- Live vehicle positions -------------------------------------------------
 
-// Single-shot OTP GraphQL query with a short timeout and no wake/retry loop.
-// Vehicle positions are polled every ~30s while a route is on screen, so the
-// Space is already awake; a slow/failed poll should fail fast (returns null)
-// rather than block for the 2-minute cold-start budget.
+// Single-shot OTP query with a short timeout and no wake/retry loop (used by
+// the 30s vehicle-position poll, where fast failure beats a long cold-start).
 async function otpQueryOnce(query, variables, timeoutMs = 8000) {
   const endpoint = `${OTP_URL.replace(/\/$/, '')}/otp/gtfs/v1`;
   const headers = { 'Content-Type': 'application/json' };
@@ -1432,10 +1410,8 @@ query Vehicles($id: String!) {
   }
 }`;
 
-// Given the transit legs of a shown itinerary ({ routeId, tripId }), return the
-// live vehicle currently operating each leg's trip (exact GTFS trip match). A
-// trip with no active vehicle (not yet dispatched, or SkyTrain with no RT feed)
-// is simply omitted — we only ever show the actual bus you're taking.
+// For each requested leg ({ routeId, tripId }), return the live vehicle running
+// that exact GTFS trip. Trips with no active vehicle are omitted.
 app.post('/api/vehicle-positions', async (req, res) => {
   if (!OTP_URL) {
     return res.status(500).json({ error: 'Server is missing OTP_URL. Add it to transit-app/.env.local.' });
@@ -1449,7 +1425,6 @@ app.post('/api/vehicle-positions', async (req, res) => {
 
   const routeIds = [...new Set(wanted.map((w) => w.routeId))];
 
-  // One query per distinct route; build a tripId -> vehicle+route lookup.
   const vehicleByTrip = new Map();
   await Promise.all(
     routeIds.map(async (routeId) => {

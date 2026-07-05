@@ -45,7 +45,7 @@ function usableItineraries(its: OtpItinerary[]): OtpItinerary[] {
   });
 }
 
-// The legend's single "RapidBus" row stands in for all six R-lines on the map.
+// The legend's "RapidBus" row stands in for all six R-lines.
 const RAPIDBUS_KEYS = [
   'R1 King George',
   'R2 Marine Drive',
@@ -55,10 +55,8 @@ const RAPIDBUS_KEYS = [
   'R6 Scott Road',
 ];
 
-// Whether a legend row should be hidden because its line isn't running now. We
-// only hide when we KNOW it's out of service (operating === false); an unknown
-// or not-yet-loaded status keeps the row visible. RapidBus is hidden only when
-// every R-line is known to be out of service.
+// Hide a legend row only when its line is known to be out of service. RapidBus
+// hides only when every R-line is out.
 function legendRowHidden(name: string, status: Record<string, RouteStatus> | null): boolean {
   if (!status) return false;
   if (name === 'RapidBus') {
@@ -105,8 +103,6 @@ function App() {
   );
   const [tripInitialLegs, setTripInitialLegs] = useState<TripLeg[] | null>(null);
   const [showCorridors, setShowCorridors] = useState(true);
-  // Which transit lines are running right now (Pacific time). Drives hiding of
-  // out-of-service lines from the map overlay + legend.
   const [routeStatus, setRouteStatus] = useState<Record<string, RouteStatus> | null>(null);
   const { theme, toggleTheme } = useTheme();
   const collections = useCollections();
@@ -138,9 +134,7 @@ function App() {
     );
   }, []);
 
-  // Poll which lines are in service so the overlay reflects the current Pacific
-  // time (e.g. SkyTrain drops off ~1 AM, NightBus only appears overnight). One
-  // minute is granular enough for service-window boundaries.
+  // Poll which lines are in service (Pacific time) once a minute.
   useEffect(() => {
     let active = true;
     const load = async () => {
