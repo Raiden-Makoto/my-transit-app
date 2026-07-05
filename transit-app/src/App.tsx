@@ -14,11 +14,13 @@ const AiTripPlanner = lazy(() => import('./components/AiTripPlanner'));
 import {
   planTransit,
   prefsToModes,
+  fetchRouteStatus,
   DEFAULT_ROUTE_PREFS,
   type LegPlan,
   type OtpItinerary,
   type OtpLeg,
   type RoutePrefs,
+  type RouteStatus,
 } from './services/otp';
 import { useCollections } from './hooks/useCollections';
 import { useLocationHistory } from './hooks/useLocationHistory';
@@ -41,6 +43,31 @@ function usableItineraries(its: OtpItinerary[]): OtpItinerary[] {
     const walkOnly = it.legs.length > 0 && it.legs.every((leg) => leg.mode === 'WALK');
     return !(walkOnly && it.duration > MAX_WALK_ONLY_SECONDS);
   });
+}
+
+// The legend's single "RapidBus" row stands in for all six R-lines on the map.
+const RAPIDBUS_KEYS = [
+  'R1 King George',
+  'R2 Marine Drive',
+  'R3 Lougheed',
+  'R4 41st Ave',
+  'R5 Hastings',
+  'R6 Scott Road',
+];
+
+// Whether a legend row should be hidden because its line isn't running now. We
+// only hide when we KNOW it's out of service (operating === false); an unknown
+// or not-yet-loaded status keeps the row visible. RapidBus is hidden only when
+// every R-line is known to be out of service.
+function legendRowHidden(name: string, status: Record<string, RouteStatus> | null): boolean {
+  if (!status) return false;
+  if (name === 'RapidBus') {
+    const known = RAPIDBUS_KEYS.map((k) => status[k]?.operating).filter(
+      (v): v is boolean => v === true || v === false,
+    );
+    return known.length > 0 && known.every((v) => v === false);
+  }
+  return status[name]?.operating === false;
 }
 
 function fmtTripDuration(seconds: number): string {
@@ -78,6 +105,9 @@ function App() {
   );
   const [tripInitialLegs, setTripInitialLegs] = useState<TripLeg[] | null>(null);
   const [showCorridors, setShowCorridors] = useState(true);
+  // Which transit lines are running right now (Pacific time). Drives hiding of
+  // out-of-service lines from the map overlay + legend.
+  const [routeStatus, setRouteStatus] = useState<Record<string, RouteStatus> | null>(null);
   const { theme, toggleTheme } = useTheme();
   const collections = useCollections();
   const history = useLocationHistory();
@@ -106,6 +136,23 @@ function App() {
         maximumAge: 0,
       },
     );
+  }, []);
+
+  // Poll which lines are in service so the overlay reflects the current Pacific
+  // time (e.g. SkyTrain drops off ~1 AM, NightBus only appears overnight). One
+  // minute is granular enough for service-window boundaries.
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const data = await fetchRouteStatus();
+      if (active && data) setRouteStatus(data.routes);
+    };
+    load();
+    const id = window.setInterval(load, 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(id);
+    };
   }, []);
 
   const clearRoute = () => {
@@ -350,8 +397,8 @@ function App() {
           <div className="text-[11px] font-semibold uppercase tracking-wide text-[#5f6368] dark:text-[#9aa0a6] mb-1.5">
             Rapid transit
           </div>
-          <ul className="space-y-1.5">
-            {[
+          {(() => {
+            const rows = [
               { name: 'Expo Line', color: '#0033a0' },
               { name: 'Millennium Line', color: '#ffcd00' },
               { name: 'Canada Line', color: '#007c9f' },
@@ -359,20 +406,35 @@ function App() {
               { name: 'SeaBus', color: '#746661', dashed: true },
               { name: 'RapidBus', color: '#008522' },
               { name: '99 B-Line', color: '#d04110' },
-            ].map((row) => (
-              <li key={row.name} className="flex items-center gap-2 text-[12px] text-[#202124] dark:text-[#e8eaed]">
-                <span
-                  className="inline-block w-5 h-[3px] rounded-full"
-                  style={
-                    row.dashed
-                      ? { backgroundImage: `repeating-linear-gradient(to right, ${row.color} 0 3px, transparent 3px 6px)` }
-                      : { backgroundColor: row.color }
-                  }
-                />
-                {row.name}
-              </li>
-            ))}
-          </ul>
+            ].filter((row) => !legendRowHidden(row.name, routeStatus));
+            if (rows.length === 0) {
+              return (
+                <div className="text-[12px] text-[#5f6368] dark:text-[#9aa0a6]">
+                  No rapid transit running now
+                </div>
+              );
+            }
+            return (
+              <ul className="space-y-1.5">
+                {rows.map((row) => (
+                  <li
+                    key={row.name}
+                    className="flex items-center gap-2 text-[12px] text-[#202124] dark:text-[#e8eaed]"
+                  >
+                    <span
+                      className="inline-block w-5 h-[3px] rounded-full"
+                      style={
+                        row.dashed
+                          ? { backgroundImage: `repeating-linear-gradient(to right, ${row.color} 0 3px, transparent 3px 6px)` }
+                          : { backgroundColor: row.color }
+                      }
+                    />
+                    {row.name}
+                  </li>
+                ))}
+              </ul>
+            );
+          })()}
         </div>
       )}
 
@@ -511,6 +573,7 @@ function App() {
         otpLegs={otpLegs}
         routing={routing}
         showCorridors={showCorridors}
+        routeStatus={routeStatus}
         theme={theme}
         onBboxChange={setBbox}
         onAddToList={setPickerPlace}

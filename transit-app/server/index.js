@@ -1232,6 +1232,153 @@ app.post('/api/stop-departures', async (req, res) => {
   }
 });
 
+// --- Route operating status (is a line running right now?) ----------------
+
+// Corridor legend lines -> their GTFS route id. Keyed by the exact `name` used
+// in src/data/rapidTransit.json so the client can filter the map overlay and
+// legend by whichever lines are actually in service at the current PST time.
+const CORRIDOR_ROUTE_IDS = {
+  'Expo Line': '1:30053',
+  'Millennium Line': '1:30052',
+  'Canada Line': '1:13686',
+  'West Coast Express': '1:6770',
+  SeaBus: '1:6771',
+  'R1 King George': '1:37808',
+  'R2 Marine Drive': '1:38311',
+  'R3 Lougheed': '1:37809',
+  'R4 41st Ave': '1:37810',
+  'R5 Hastings': '1:37807',
+  'R6 Scott Road': '1:46604',
+  '99 B-Line': '1:6641',
+};
+
+// All trips on a route with only their first departure + last arrival (seconds
+// from service-day midnight; values > 86400 = after-midnight service) and the
+// calendar dates each trip runs. That's enough to derive a per-date operating
+// window without pulling every intermediate stoptime.
+const ROUTE_TRIPS_QUERY = `
+query RouteTrips($id: String!) {
+  route(id: $id) {
+    gtfsId
+    longName
+    patterns {
+      trips {
+        departureStoptime { scheduledDeparture }
+        arrivalStoptime { scheduledArrival }
+        activeDates
+      }
+    }
+  }
+}`;
+
+// GTFS is static and only changes when a new feed is loaded, so the per-date
+// operating windows are safe to cache for a long while.
+const ROUTE_WINDOW_TTL_MS = 6 * 60 * 60 * 1000;
+const routeWindowCache = new Map(); // routeId -> { fetchedAt, windows: Map<YYYYMMDD, {minDep,maxArr}> }
+
+// Build (and cache) a map of serviceDate -> {minDep, maxArr} for a route by
+// scanning every trip's first-departure/last-arrival across its active dates.
+async function getRouteWindows(routeId) {
+  const cached = routeWindowCache.get(routeId);
+  if (cached && Date.now() - cached.fetchedAt < ROUTE_WINDOW_TTL_MS) return cached.windows;
+
+  const data = await otpQuery(ROUTE_TRIPS_QUERY, { id: routeId });
+  const windows = new Map();
+  const trips = (data?.route?.patterns ?? []).flatMap((p) => p.trips ?? []);
+  for (const t of trips) {
+    const dep = t.departureStoptime?.scheduledDeparture;
+    const arr = t.arrivalStoptime?.scheduledArrival;
+    if (dep == null && arr == null) continue;
+    for (const ds of t.activeDates ?? []) {
+      const w = windows.get(ds) ?? { minDep: Infinity, maxArr: -Infinity };
+      if (dep != null && dep < w.minDep) w.minDep = dep;
+      if (arr != null && arr > w.maxArr) w.maxArr = arr;
+      windows.set(ds, w);
+    }
+  }
+  routeWindowCache.set(routeId, { fetchedAt: Date.now(), windows });
+  return windows;
+}
+
+// Current Pacific-time service context: today's + yesterday's GTFS service dates
+// (YYYYMMDD) and seconds since local midnight. Yesterday matters because late-
+// night trips belong to the previous service day with times > 24:00.
+function pacificServiceContext() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Vancouver',
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(new Date());
+  const get = (t) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  const y = get('year');
+  const mo = get('month');
+  const d = get('day');
+  const hour = get('hour') % 24; // Intl can emit "24" at midnight
+  const nowSec = hour * 3600 + get('minute') * 60 + get('second');
+  const ymd = (dt) =>
+    `${dt.getUTCFullYear()}${pad2(dt.getUTCMonth() + 1)}${pad2(dt.getUTCDate())}`;
+  const todayUtc = new Date(Date.UTC(y, mo - 1, d));
+  const yesterdayUtc = new Date(todayUtc);
+  yesterdayUtc.setUTCDate(yesterdayUtc.getUTCDate() - 1);
+  return { today: ymd(todayUtc), yesterday: ymd(yesterdayUtc), nowSec };
+}
+
+// A route is operating "now" if the current time falls inside today's service
+// window, OR inside yesterday's window shifted past midnight (overnight service
+// like NightBus, or SkyTrain's ~01:00 tail).
+function evaluateOperating(windows, ctx) {
+  const today = windows.get(ctx.today);
+  if (today && ctx.nowSec >= today.minDep && ctx.nowSec <= today.maxArr) return true;
+  const yest = windows.get(ctx.yesterday);
+  const shifted = ctx.nowSec + 86400;
+  if (yest && shifted >= yest.minDep && shifted <= yest.maxArr) return true;
+  return false;
+}
+
+app.get('/api/route-status', async (_req, res) => {
+  if (!OTP_URL) {
+    return res.status(500).json({ error: 'Server is missing OTP_URL. Add it to transit-app/.env.local.' });
+  }
+
+  const ctx = pacificServiceContext();
+  const names = Object.keys(CORRIDOR_ROUTE_IDS);
+  const routes = {};
+
+  await Promise.all(
+    names.map(async (name) => {
+      try {
+        const windows = await getRouteWindows(CORRIDOR_ROUTE_IDS[name]);
+        const today = windows.get(ctx.today) ?? null;
+        routes[name] = {
+          operating: evaluateOperating(windows, ctx),
+          // Today's service window (seconds from local midnight) for display,
+          // e.g. 18360 -> 5:06 AM. null when the line doesn't run today at all.
+          todayStart: today && Number.isFinite(today.minDep) ? today.minDep : null,
+          todayEnd: today && Number.isFinite(today.maxArr) ? today.maxArr : null,
+        };
+      } catch (err) {
+        // A single failing route shouldn't blank the whole overlay; report it as
+        // "unknown" (operating: null) so the client can keep it visible.
+        console.warn(`[route-status] ${name} failed: ${err.message}`);
+        routes[name] = { operating: null, todayStart: null, todayEnd: null };
+      }
+    }),
+  );
+
+  return res.json({
+    generatedAt: Date.now(),
+    timezone: 'America/Vancouver',
+    serviceDate: ctx.today,
+    nowSec: ctx.nowSec,
+    routes,
+  });
+});
+
 app.get('/api/health', (_req, res) =>
   res.json({ ok: true, model: HF_MODEL, hasToken: Boolean(HF_TOKEN), otp: Boolean(OTP_URL) }),
 );

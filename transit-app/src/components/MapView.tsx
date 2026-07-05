@@ -3,11 +3,14 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents 
 import { FolderPlus, Route, Clock } from 'lucide-react';
 import L from 'leaflet';
 import type { PlaceCollection, SavedLocation, TripLeg } from '../types/location';
-import type { OtpLeg } from '../services/otp';
+import type { OtpLeg, RouteStatus } from '../services/otp';
 import { isTransitStop } from '../services/geocode';
 import rapidTransit from '../data/rapidTransit.json';
 
 export type Bbox = [number, number, number, number];
+
+// Operating status per corridor line, keyed by the feature `name`.
+export type RouteStatusMap = Record<string, RouteStatus>;
 
 type CorridorMode = 'skytrain' | 'wce' | 'seabus' | 'rapidbus' | 'bline';
 
@@ -81,7 +84,7 @@ function FitGeometry({ points }: { points: [number, number][] }) {
   return null;
 }
 
-function TransitCorridors() {
+function TransitCorridors({ routeStatus }: { routeStatus: RouteStatusMap | null }) {
   const map = useMap();
   const [zoom, setZoom] = useState(() => map.getZoom());
   useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
@@ -89,7 +92,12 @@ function TransitCorridors() {
 
   return (
     <>
-      {(rapidTransit.features as CorridorFeature[]).map((f, i) => {
+      {(rapidTransit.features as CorridorFeature[])
+        // Hide a line only when we KNOW it isn't running now (operating === false).
+        // Unknown/unloaded status keeps the line visible so a lookup hiccup never
+        // blanks the map.
+        .filter((f) => !routeStatus || routeStatus[f.properties.name]?.operating !== false)
+        .map((f, i) => {
         const base = CORRIDOR_STYLE[f.properties.mode as CorridorMode];
         return (
           <Polyline
@@ -260,6 +268,7 @@ interface MapViewProps {
   otpLegs: OtpLeg[] | null;
   routing: boolean;
   showCorridors: boolean;
+  routeStatus: RouteStatusMap | null;
   theme: 'light' | 'dark';
   onBboxChange: (bbox: Bbox) => void;
   onAddToList: (place: SavedLocation) => void;
@@ -277,6 +286,7 @@ export default function MapView({
   otpLegs,
   routing,
   showCorridors,
+  routeStatus,
   theme,
   onBboxChange,
   onAddToList,
@@ -312,7 +322,7 @@ export default function MapView({
             : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
         }
       />
-      {showCorridors && <TransitCorridors />}
+      {showCorridors && <TransitCorridors routeStatus={routeStatus} />}
       <Marker position={position} icon={blueDotIcon}>
         <Popup>You are here</Popup>
       </Marker>

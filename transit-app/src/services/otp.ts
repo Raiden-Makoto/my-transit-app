@@ -101,6 +101,45 @@ export function prefsToModes(prefs: RoutePrefs): string[] {
   return modes;
 }
 
+/** Operating status of one transit line at the current Pacific time. */
+export interface RouteStatus {
+  /** true = running now, false = not running now, null = unknown (lookup failed). */
+  operating: boolean | null;
+  /** Today's first departure, seconds from local midnight (null if not running today). */
+  todayStart: number | null;
+  /** Today's last arrival, seconds from local midnight; may exceed 86400 for after-midnight service. */
+  todayEnd: number | null;
+}
+
+export interface RouteStatusResponse {
+  generatedAt: number;
+  timezone: string;
+  serviceDate: string; // YYYYMMDD
+  nowSec: number;
+  /** Keyed by the corridor line name (matches rapidTransit.json `name`). */
+  routes: Record<string, RouteStatus>;
+}
+
+/**
+ * Fetch which transit lines are operating right now (Pacific time), so the map
+ * overlay and legend can hide lines that aren't in service (e.g. NightBus only
+ * shows in the early AM). Returns null if the backend is unavailable.
+ */
+export async function fetchRouteStatus(): Promise<RouteStatusResponse | null> {
+  try {
+    const res = await fetch('/api/route-status');
+    if (!res.ok) {
+      console.warn(`[otp] route-status ${res.status} ${res.statusText}`);
+      return null;
+    }
+    const data = await res.json();
+    return data && typeof data.routes === 'object' ? (data as RouteStatusResponse) : null;
+  } catch (err) {
+    console.warn('[otp] route-status fetch failed', err);
+    return null;
+  }
+}
+
 /** Request transit itineraries between two coordinates from the OTP backend. */
 export async function planTransit(
   from: { lat: number; lon: number },
