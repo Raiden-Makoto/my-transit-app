@@ -49,6 +49,38 @@ function legLabel(leg: OtpLeg): string {
   return leg.route?.shortName || leg.route?.longName || '';
 }
 
+// A transit leg is "live" when OTP applied GTFS-realtime data to it.
+function isLiveLeg(leg: OtpLeg): boolean {
+  return Boolean(leg.realTime) && leg.mode !== 'WALK';
+}
+
+// Human delay text from seconds (+ late / − early). Within a minute = on time.
+function delayInfo(delaySec: number | null | undefined): { text: string; tone: 'ontime' | 'late' | 'early' } {
+  const m = Math.round((delaySec ?? 0) / 60);
+  if (m === 0) return { text: 'On time', tone: 'ontime' };
+  if (m > 0) return { text: `${m} min late`, tone: 'late' };
+  return { text: `${-m} min early`, tone: 'early' };
+}
+
+// Google-Maps style "Live" indicator: a pulsing green dot plus the current
+// delay relative to schedule (colored red when running late).
+function LiveBadge({ delaySec }: { delaySec: number | null | undefined }) {
+  const { text, tone } = delayInfo(delaySec);
+  // On time / early = green, late = red — applied to both the text and the dot.
+  const isLate = tone === 'late';
+  const textColor = isLate ? 'text-[#d93025] dark:text-[#f28b82]' : 'text-[#188038] dark:text-[#81c995]';
+  const dotColor = isLate ? 'bg-[#d93025]' : 'bg-[#188038]';
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-medium">
+      <span className="relative flex h-1.5 w-1.5">
+        <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${dotColor}`} />
+        <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${dotColor}`} />
+      </span>
+      <span className={textColor}>Live · {text}</span>
+    </span>
+  );
+}
+
 const EFFECT_LABEL: Record<string, string> = {
   DETOUR: 'Detour',
   REDUCED_SERVICE: 'Reduced service',
@@ -143,6 +175,11 @@ function StepRow({ leg, isLast }: { leg: OtpLeg; isLast: boolean }) {
           {fmtTime(leg.endTime)} · Get off at {leg.to.name}
           {stops > 0 ? ` (${stops} stop${stops === 1 ? '' : 's'})` : ''}
         </div>
+        {isLiveLeg(leg) && (
+          <div className="mt-0.5">
+            <LiveBadge delaySec={leg.departureDelay} />
+          </div>
+        )}
         {(leg.alerts?.length ?? 0) > 0 && (
           <div className="mt-1.5 flex flex-col gap-1">
             {(leg.alerts ?? []).map((a, k) => (
@@ -418,6 +455,9 @@ export default function ItineraryOptions({
                 {activePlan?.options.map((opt, i) => {
                   const isSelected = i === activePlan.selected;
                   const optAlerts = uniqueAlerts(opt.legs);
+                  // The first live transit leg is the one you board first, so its
+                  // delay is the most relevant "when does my trip really start".
+                  const liveLeg = opt.legs.find(isLiveLeg) ?? null;
                   return (
                     <li key={i}>
                       <button
@@ -447,6 +487,11 @@ export default function ItineraryOptions({
                           ))}
                           {isSelected && <Check size={15} className="ml-auto text-[#1a73e8]" />}
                         </div>
+                        {liveLeg && (
+                          <div className="mt-1.5">
+                            <LiveBadge delaySec={liveLeg.departureDelay} />
+                          </div>
+                        )}
                         {optAlerts.length > 0 &&
                           (isSelected ? (
                             <div className="mt-2 flex flex-col gap-1">

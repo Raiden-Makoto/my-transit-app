@@ -622,6 +622,10 @@ query Plan($from: InputCoordinates!, $to: InputCoordinates!, $date: String, $tim
         distance
         startTime
         endTime
+        realTime
+        realtimeState
+        arrivalDelay
+        departureDelay
         headsign
         from { name lat lon }
         to { name lat lon }
@@ -662,6 +666,13 @@ function mapItineraries(data) {
       distance: leg.distance,
       startTime: leg.startTime,
       endTime: leg.endTime,
+      // Whether GTFS-realtime data was applied to this leg, and the resulting
+      // delay (seconds; + = later than scheduled). startTime/endTime already
+      // reflect these delays; the UI surfaces them as a "Live" indicator.
+      realTime: Boolean(leg.realTime),
+      realtimeState: leg.realtimeState ?? null,
+      departureDelay: leg.departureDelay ?? null,
+      arrivalDelay: leg.arrivalDelay ?? null,
       headsign: leg.headsign ?? null,
       // Stops travelled on this leg = intermediate stops + the alighting stop.
       numStops: Array.isArray(leg.intermediateStops) ? leg.intermediateStops.length + 1 : null,

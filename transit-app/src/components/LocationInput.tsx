@@ -37,9 +37,11 @@ export default function LocationInput({ value, onChange, placeholder, viewport, 
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
+            setFocused(true);
             if (value) onChange(null);
           }}
           onFocus={() => setFocused(true)}
+          onClick={() => setFocused(true)}
           onBlur={() => window.setTimeout(() => setFocused(false), 150)}
           placeholder={placeholder ?? 'Choose location'}
           className="flex-1 min-w-0 bg-transparent outline-none text-[14px] text-[#202124] dark:text-[#e8eaed] placeholder:text-[#5f6368] dark:placeholder:text-[#9aa0a6]"

@@ -28,8 +28,12 @@ export interface OtpLeg {
   mode: string; // WALK | BUS | SUBWAY | RAIL | TRAM | FERRY | ...
   duration: number; // seconds
   distance: number; // meters
-  startTime: number; // epoch ms
-  endTime: number; // epoch ms
+  startTime: number; // epoch ms (already realtime-adjusted when realTime is true)
+  endTime: number; // epoch ms (already realtime-adjusted when realTime is true)
+  realTime?: boolean; // GTFS-realtime data was applied to this leg
+  realtimeState?: string | null; // SCHEDULED | UPDATED | CANCELED | ...
+  departureDelay?: number | null; // seconds vs schedule at boarding; + = late
+  arrivalDelay?: number | null; // seconds vs schedule at alighting; + = late
   headsign?: string | null; // transit destination sign, e.g. "99 B-Line/To UBC"
   numStops?: number | null; // stops travelled on a transit leg
   from: OtpPlace;
