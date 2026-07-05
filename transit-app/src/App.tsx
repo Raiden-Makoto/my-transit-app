@@ -121,11 +121,13 @@ function App() {
     setMapCenter([location.lat, location.lon]);
     setDestination(location);
     setViewedList(null);
+    setDeparturesStop(null);
     clearRoute();
   };
 
   const handleViewList = (list: PlaceCollection) => {
     setDestination(null);
+    setDeparturesStop(null);
     clearRoute();
     setViewedList(list);
   };
@@ -207,6 +209,7 @@ function App() {
   const handleShowRoute = (legs: TripLeg[], ai = false) => {
     setDestination(null);
     setViewedList(null);
+    setDeparturesStop(null);
     setTripLegs(legs);
     setRouteIsAi(ai);
     void runPlan(legs, routePrefs, ai);

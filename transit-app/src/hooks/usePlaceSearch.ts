@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { searchPlaces } from '../services/geocode';
 import type { SavedLocation } from '../types/location';
 
@@ -26,7 +26,11 @@ const DEBOUNCE_MS = 300;
 export function usePlaceSearch(query: string, viewport?: SearchViewport): PlaceSearchState {
   const [state, setState] = useState<PlaceSearchState>({ results: [], loading: false, error: null });
 
-  const bboxKey = viewport?.bbox?.join(',');
+  // Read the viewport lazily at fetch time so map panning/settling (which
+  // updates lat/lon/bbox) doesn't cancel and restart an in-flight search. The
+  // search should only react to the query changing.
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -39,11 +43,12 @@ export function usePlaceSearch(query: string, viewport?: SearchViewport): PlaceS
     setState((prev) => ({ ...prev, loading: true, error: null }));
 
     const timer = window.setTimeout(() => {
+      const vp = viewportRef.current;
       searchPlaces(trimmed, {
         signal: controller.signal,
-        lat: viewport?.lat,
-        lon: viewport?.lon,
-        bbox: viewport?.bbox,
+        lat: vp?.lat,
+        lon: vp?.lon,
+        bbox: vp?.bbox,
       })
         .then((results) => setState({ results, loading: false, error: null }))
         .catch((err: unknown) => {
@@ -56,8 +61,7 @@ export function usePlaceSearch(query: string, viewport?: SearchViewport): PlaceS
       controller.abort();
       window.clearTimeout(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, viewport?.lat, viewport?.lon, bboxKey]);
+  }, [query]);
 
   return state;
 }
