@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Search,
   X,
@@ -63,6 +63,22 @@ export default function SearchBox({
   const [renameValue, setRenameValue] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close the suggestions sheet when clicking anywhere outside the search box.
+  // Relying on a bubbled onBlur/relatedTarget check proved flaky (a transient
+  // blur during the focus transition could immediately re-close the sheet), so
+  // opening is driven directly by the input and closing by an outside pointer.
+  useEffect(() => {
+    if (!focused) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [focused]);
 
   const { results, loading, error } = usePlaceSearch(query, viewport);
   const hasQuery = query.trim().length > 0;
@@ -175,15 +191,8 @@ export default function SearchBox({
 
   return (
     <div
+      ref={containerRef}
       className="absolute top-3 left-[80px] z-[1000] w-[min(calc(92vw-80px),400px)] font-sans text-[#202124] dark:text-[#e8eaed]"
-      onFocus={() => setFocused(true)}
-      onBlur={(e) => {
-        // Keep the sheet open while focus moves between elements inside the box
-        // (e.g. the search input -> the new-list field).
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-          setFocused(false);
-        }
-      }}
     >
       {/* Floating search pill */}
       <div className="flex items-center h-12 bg-white dark:bg-[#2a2a2e] rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.3)] transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.35)] focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.35)]">
@@ -194,7 +203,12 @@ export default function SearchBox({
           ref={inputRef}
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setFocused(true);
+          }}
+          onFocus={() => setFocused(true)}
+          onClick={() => setFocused(true)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleSubmit();
             if (e.key === 'Escape') reset();
